@@ -484,12 +484,8 @@ async function cmdGenerateCV(args, options = {}) {
     });
 
     console.log(chalk.green(`\n✓ CV generated!`));
-    console.log(chalk.dim(`  LaTeX: ${result.texPath}`));
-
-    if (result.pdfPath) {
-      console.log(chalk.green(`  PDF:   ${result.pdfPath}`));
-    }
-
+    console.log(chalk.dim(`  JSON: ${result.jsonPath}`));
+    console.log(chalk.green(`  PDF:  ${result.pdfPath}`));
     console.log(chalk.dim(`  Tokens used: ${result.usage.inputTokens + result.usage.outputTokens}\n`));
   } catch (error) {
     console.error(chalk.red('Failed to generate CV:'), error.message);

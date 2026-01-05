@@ -4,7 +4,6 @@
  */
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { readFile, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -15,7 +14,6 @@ const CONFIG_PATH = join(__dirname, '..', '.cvconfig.json');
 
 // Default configuration values
 const DEFAULTS = {
-  template: 'default',
   model: 'google/gemini-2.5-flash',
   analysisModel: 'google/gemini-2.0-flash-lite-001',
   name: 'Your Name',
@@ -88,39 +86,6 @@ export function setCVConfigValue(key, value) {
   const current = getCVConfig();
   current[key] = value;
   saveConfig(current);
-}
-
-/**
- * Get the LaTeX template content
- * @param {string} templateName - Template name or path
- * @returns {Promise<string>} Template content
- */
-export async function getTemplate(templateName = 'default') {
-  // Check if it's a path to a custom template
-  if (templateName.endsWith('.tex') || templateName.includes('/') || templateName.includes('\\')) {
-    try {
-      await access(templateName);
-      return await readFile(templateName, 'utf-8');
-    } catch {
-      throw new Error(`Template file not found: ${templateName}`);
-    }
-  }
-
-  // Otherwise, load from built-in templates
-  const templatePath = join(__dirname, '..', 'data', 'templates', `${templateName}.tex`);
-  try {
-    return await readFile(templatePath, 'utf-8');
-  } catch {
-    throw new Error(`Built-in template not found: ${templateName}. Available: default`);
-  }
-}
-
-/**
- * List available templates
- * @returns {string[]} Template names
- */
-export function listTemplates() {
-  return ['default'];
 }
 
 /**
