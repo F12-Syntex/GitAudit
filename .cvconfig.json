@@ -1,6 +1,7 @@
 {
   "template": "default",
   "model": "google/gemini-2.5-flash",
+  "analysisModel": "google/gemini-2.0-flash-lite-001",
   "name": "Saifurahmaan Khan",
   "email": "eng.saifkhan2003@gmail.com",
   "phone": "+44 7459 533082",

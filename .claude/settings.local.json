@@ -5,7 +5,8 @@
       "Bash(npm install:*)",
       "Bash(node src/index.js:*)",
       "Bash(node:*)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

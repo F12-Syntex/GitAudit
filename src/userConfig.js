@@ -16,7 +16,8 @@ const CONFIG_PATH = join(__dirname, '..', '.cvconfig.json');
 // Default configuration values
 const DEFAULTS = {
   template: 'default',
-  model: 'openai/gpt-4o',
+  model: 'google/gemini-2.5-flash',
+  analysisModel: 'google/gemini-2.0-flash-lite-001',
   name: 'Your Name',
   email: 'your.email@example.com',
   phone: '+44 XXX XXX XXXX',
@@ -105,7 +106,7 @@ export async function getTemplate(templateName = 'default') {
   }
 
   // Otherwise, load from built-in templates
-  const templatePath = join(__dirname, '..', 'templates', `${templateName}.tex`);
+  const templatePath = join(__dirname, '..', 'data', 'templates', `${templateName}.tex`);
   try {
     return await readFile(templatePath, 'utf-8');
   } catch {

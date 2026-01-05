@@ -190,7 +190,7 @@ async function analyzeRepository(owner, repo, options = {}) {
   saveRepoAnalysis(owner, repo, result);
 
   const markdown = generateMarkdownReport(result);
-  await exportToFile(markdown, `reports/repositories/${repo}.md`);
+  await exportToFile(markdown, `data/reports/repositories/${repo}.md`);
 
   return result;
 }
@@ -305,7 +305,7 @@ async function cmdAnalyzeAll(options = {}) {
   const allCached = getAllRepoAnalyses();
   if (allCached.length > 0) {
     const summaryMarkdown = generateCombinedSummary(allCached);
-    await exportToFile(summaryMarkdown, 'reports/summary.md');
+    await exportToFile(summaryMarkdown, 'data/reports/summary.md');
   }
 
   const totalElapsed = Date.now() - startTime;
@@ -314,7 +314,7 @@ async function cmdAnalyzeAll(options = {}) {
   if (skipCount > 0) {
     console.log(chalk.dim(`  Skipped ${skipCount} repos (no commits)`));
   }
-  console.log(chalk.dim(`  Reports saved to reports/`));
+  console.log(chalk.dim(`  Reports saved to data/reports/`));
   console.log(chalk.cyan('─'.repeat(50) + '\n'));
 }
 
@@ -335,9 +335,9 @@ async function cmdExport(exportArg) {
       return;
     }
     const markdown = generateMarkdownReport(analysis);
-    await exportToFile(markdown, `reports/repositories/${repo}.md`);
+    await exportToFile(markdown, `data/reports/repositories/${repo}.md`);
   } else {
-    const baseDir = exportArg || './reports';
+    const baseDir = exportArg || './data/reports';
     console.log(chalk.bold.cyan(`\nExporting ${allAnalyses.length} analyses to ${baseDir}/\n`));
 
     for (const analysis of allAnalyses) {
@@ -360,14 +360,14 @@ async function cmdBigExport() {
     return;
   }
   const bigReport = generateBigExport(allAnalyses);
-  await exportToFile(bigReport, 'reports/report.md');
-  console.log(chalk.green(`\n✓ Exported ${allAnalyses.length} repositories to reports/report.md\n`));
+  await exportToFile(bigReport, 'data/reports/report.md');
+  console.log(chalk.green(`\n✓ Exported ${allAnalyses.length} repositories to data/reports/report.md\n`));
 }
 
 async function cmdTokenCount() {
-  const tokenStats = await countReportTokens('reports');
+  const tokenStats = await countReportTokens('data/reports');
   if (tokenStats.totals.totalFiles === 0) {
-    console.log(chalk.yellow('No report files found in reports/\n'));
+    console.log(chalk.yellow('No report files found in data/reports/\n'));
     console.log(chalk.dim('Run analyze first to generate reports.'));
     return;
   }
@@ -513,7 +513,7 @@ async function cmdConfig(action, key, value) {
   console.log('Usage: yarn start config [set <key> <value> | get <key>]\n');
 }
 
-async function cmdImport(reportsDir = 'reports/repositories') {
+async function cmdImport(reportsDir = 'data/reports/repositories') {
   if (!isAuthenticated()) {
     console.log(chalk.yellow('Not authenticated. Please login first to determine owner.\n'));
     await authenticate();
@@ -608,7 +608,10 @@ async function showMainMenu() {
     );
   }
 
-  choices.push({ name: chalk.dim('Exit'), value: 'exit' });
+  choices.push(
+    { name: '❓  Help (CLI commands)', value: 'help' },
+    { name: chalk.dim('Exit'), value: 'exit' }
+  );
 
   const action = await select({
     message: 'What would you like to do?',
@@ -671,6 +674,9 @@ async function interactiveMode() {
           break;
         case 'clear-cache':
           await cmdClearCache();
+          break;
+        case 'help':
+          showHelp();
           break;
       }
 
