@@ -28,3 +28,4 @@ cv/
 
 # Local environment variables
 .env.local
+data/
