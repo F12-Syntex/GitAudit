@@ -22,6 +22,8 @@ build/
 
 # Output directories
 reports/*.md
+reports/**/*.md
+
 
 # Local environment variables
 .env.local

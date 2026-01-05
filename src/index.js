@@ -211,6 +211,10 @@ async function analyzeRepository(owner, repo, options = {}) {
   // Cache the full analysis result
   saveRepoAnalysis(owner, repo, result);
 
+  // Auto-export to reports folder
+  const markdown = generateMarkdownReport(result);
+  await exportToFile(markdown, `reports/repositories/${repo}.md`);
+
   return result;
 }
 
@@ -289,7 +293,7 @@ async function main() {
         }
         const repoName = exportArg.split('/')[1];
         const markdown = generateMarkdownReport(analysis);
-        const filename = `reports/repositories/${repoName}/report.md`;
+        const filename = `reports/repositories/${repoName}.md`;
         await exportToFile(markdown, filename);
       } else {
         // Export all to structured directory
@@ -299,7 +303,7 @@ async function main() {
         // Export individual repo reports
         for (const analysis of allAnalyses) {
           const repoName = analysis.repoKey.split('/')[1];
-          const filename = `${baseDir}/repositories/${repoName}/report.md`;
+          const filename = `${baseDir}/repositories/${repoName}.md`;
           const markdown = generateMarkdownReport(analysis);
           await exportToFile(markdown, filename);
         }
@@ -310,7 +314,7 @@ async function main() {
 
         console.log(chalk.green(`\nExported ${allAnalyses.length} reports to ${baseDir}/`));
         console.log(chalk.dim(`  ${baseDir}/summary.md - Combined overview`));
-        console.log(chalk.dim(`  ${baseDir}/repositories/<repo>/report.md - Individual reports`));
+        console.log(chalk.dim(`  ${baseDir}/repositories/<repo>.md - Individual reports`));
       }
     } else if (hasCommand('analyze-all')) {
       if (!isAuthenticated()) {
@@ -337,10 +341,6 @@ async function main() {
 
       console.log(chalk.bold.cyan(`\nAnalyzing ${unanalyzedRepos.length} unanalyzed repositories...\n`));
       console.log(chalk.dim(`(${repos.length - unanalyzedRepos.length} already analyzed, skipping)\n`));
-
-      // Check for export flag
-      const exportIndex = getCommandIndex('export');
-      const exportDir = exportIndex !== -1 ? args[exportIndex + 1] : null;
 
       // Check for force flag
       const forceMode = hasCommand('force');
@@ -369,15 +369,8 @@ async function main() {
           results.push(analysis);
           successCount++;
 
-          // Export individual report if export dir specified
-          if (exportDir) {
-            const markdown = generateMarkdownReport(analysis);
-            const filename = `${exportDir}/repositories/${repoName}/report.md`;
-            await exportToFile(markdown, filename);
-          } else {
-            // Brief summary for console
-            console.log(chalk.dim(`  ${analysis.stats.totalCommits} commits, ${analysis.stats.totalBatches || 0} batches\n`));
-          }
+          // Brief summary for console (individual reports auto-exported by analyzeRepository)
+          console.log(chalk.dim(`  ${analysis.stats.totalCommits} commits, ${analysis.stats.totalBatches || 0} batches\n`));
         } catch (error) {
           console.log(chalk.red(`  Error: ${error.message}\n`));
         }
@@ -393,10 +386,11 @@ async function main() {
         }
       }
 
-      // Export combined summary if exporting
-      if (exportDir && results.length > 0) {
-        const summaryMarkdown = generateCombinedSummary(results);
-        await exportToFile(summaryMarkdown, `${exportDir}/summary.md`);
+      // Auto-generate combined summary from ALL cached analyses
+      const allCachedAnalyses = getAllRepoAnalyses();
+      if (allCachedAnalyses.length > 0) {
+        const summaryMarkdown = generateCombinedSummary(allCachedAnalyses);
+        await exportToFile(summaryMarkdown, 'reports/summary.md');
       }
 
       // Final summary
@@ -406,9 +400,7 @@ async function main() {
       if (skipCount > 0) {
         console.log(chalk.dim(`Skipped ${skipCount} repos (no commits by you)`));
       }
-      if (exportDir) {
-        console.log(chalk.dim(`Reports exported to ${exportDir}/`));
-      }
+      console.log(chalk.dim(`Reports saved to reports/`));
       console.log(chalk.cyan('='.repeat(60) + '\n'));
 
     } else if (hasCommand('analyze')) {

@@ -265,7 +265,7 @@ export function generateCombinedSummary(analyses) {
     const stats = analysis.stats;
     const repoName = repo.name;
 
-    sections.push(`### [${repoName}](./repositories/${repoName}/report.md)\n`);
+    sections.push(`### [${repoName}](./repositories/${repoName}.md)\n`);
 
     if (repo.description) {
       sections.push(`${repo.description}\n`);
