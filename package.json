@@ -1,0 +1,29 @@
+{
+  "name": "gitaudit",
+  "version": "1.0.0",
+  "description": "GitHub portfolio analyzer for developers - analyzes repositories and generates achievement reports",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "auth": "node src/index.js --auth",
+    "list": "node src/index.js --list"
+  },
+  "keywords": [
+    "github",
+    "portfolio",
+    "analyzer",
+    "developer",
+    "resume"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@octokit/auth-oauth-device": "^7.1.1",
+    "@octokit/rest": "^21.0.2",
+    "chalk": "^5.3.0",
+    "conf": "^13.0.1",
+    "dotenv": "^16.4.5",
+    "ora": "^8.1.0"
+  }
+}
