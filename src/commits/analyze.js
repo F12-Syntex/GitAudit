@@ -349,6 +349,10 @@ export function categorizeWork(analyses) {
 export function getAnalysisStats(analyses) {
   const categorized = categorizeWork(analyses);
 
+  // Collect all commits for date/time analysis
+  const allCommits = analyses.flatMap(a => a.batch.commits);
+  const workStats = estimateWorkHours(allCommits);
+
   return {
     totalBatches: analyses.length,
     totalCommits: analyses.reduce((sum, a) => sum + a.batch.commits.length, 0),
@@ -358,5 +362,98 @@ export function getAnalysisStats(analyses) {
     }, {}),
     importantCount: analyses.filter(a => a.importance >= IMPORTANCE_THRESHOLD).length,
     detailedCount: analyses.filter(a => a.detailedAnalysis).length,
+    ...workStats,
+  };
+}
+
+/**
+ * Estimate work hours based on commit timestamps
+ * Uses session-based approach: commits within SESSION_GAP are one session
+ * Applies WORK_RATIO to account for non-commit time (research, testing, etc.)
+ * @param {Object[]} commits - Array of commits
+ * @returns {Object} Work statistics
+ */
+export function estimateWorkHours(commits) {
+  if (commits.length === 0) {
+    return {
+      firstCommit: null,
+      lastCommit: null,
+      estimatedHours: 0,
+      workSessions: 0,
+      avgSessionLength: 0,
+    };
+  }
+
+  // Session gap threshold (2 hours) - commits further apart are separate sessions
+  const SESSION_GAP_MS = 2 * 60 * 60 * 1000;
+
+  // Ratio of actual work time to commit-based time
+  // Accounts for: reading docs, debugging, testing, thinking
+  // Conservative estimate: for every hour of commits, ~0.5 hours of other work
+  const WORK_MULTIPLIER = 1.5;
+
+  // Minimum session time (15 minutes) - even a single commit represents some work
+  const MIN_SESSION_MS = 15 * 60 * 1000;
+
+  // Sort commits by date (oldest first)
+  const sortedCommits = [...commits].sort((a, b) => {
+    const dateA = new Date(a.commit?.author?.date || 0);
+    const dateB = new Date(b.commit?.author?.date || 0);
+    return dateA - dateB;
+  });
+
+  const firstCommitDate = new Date(sortedCommits[0].commit?.author?.date);
+  const lastCommitDate = new Date(sortedCommits[sortedCommits.length - 1].commit?.author?.date);
+
+  // Group into sessions
+  const sessions = [];
+  let currentSession = {
+    start: firstCommitDate,
+    end: firstCommitDate,
+    commits: 1,
+  };
+
+  for (let i = 1; i < sortedCommits.length; i++) {
+    const commitDate = new Date(sortedCommits[i].commit?.author?.date);
+    const gap = commitDate - currentSession.end;
+
+    if (gap > SESSION_GAP_MS) {
+      // New session
+      sessions.push(currentSession);
+      currentSession = {
+        start: commitDate,
+        end: commitDate,
+        commits: 1,
+      };
+    } else {
+      // Extend current session
+      currentSession.end = commitDate;
+      currentSession.commits++;
+    }
+  }
+  sessions.push(currentSession);
+
+  // Calculate total work time
+  let totalSessionMs = 0;
+  for (const session of sessions) {
+    const sessionLength = session.end - session.start;
+    // Each session is at least MIN_SESSION_MS
+    totalSessionMs += Math.max(sessionLength, MIN_SESSION_MS);
+  }
+
+  // Apply work multiplier
+  const estimatedMs = totalSessionMs * WORK_MULTIPLIER;
+  const estimatedHours = Math.round(estimatedMs / (60 * 60 * 1000) * 10) / 10;
+
+  // Average session length
+  const avgSessionMs = totalSessionMs / sessions.length;
+  const avgSessionMinutes = Math.round(avgSessionMs / (60 * 1000));
+
+  return {
+    firstCommit: firstCommitDate.toISOString(),
+    lastCommit: lastCommitDate.toISOString(),
+    estimatedHours,
+    workSessions: sessions.length,
+    avgSessionLength: avgSessionMinutes,
   };
 }

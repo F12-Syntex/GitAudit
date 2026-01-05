@@ -1,6 +1,6 @@
 /**
  * Prompt templates for commit analysis
- * Designed for token efficiency
+ * Designed for token efficiency and factual output
  */
 
 /**
@@ -29,7 +29,7 @@ export function batchCategorizationPrompt(batch) {
     ? `${new Date(batch.endDate).toLocaleDateString()} - ${new Date(batch.startDate).toLocaleDateString()}`
     : 'unknown';
 
-  return `Analyze these git commits and categorize:
+  return `Categorize these git commits:
 
 Commits (${batch.commits.length} total, ${dateRange}):
 ${commits}
@@ -37,7 +37,7 @@ ${commits}
 Respond ONLY with JSON:
 {
   "category": "feature|bugfix|refactor|docs|test|performance|chore|style|other",
-  "description": "Brief 1-sentence summary of what was done",
+  "description": "Technical 1-sentence description: what was built/fixed, which technologies/frameworks used",
   "importance": 1-5
 }
 
@@ -46,7 +46,9 @@ Importance scale:
 2: Small (config changes, minor fixes)
 3: Medium (notable features, significant fixes)
 4: Large (major features, architectural changes)
-5: Critical (core system changes)`;
+5: Critical (core system changes)
+
+Be factual and technical. Example description: "Built REST API endpoints using Express.js with PostgreSQL for user authentication"`;
 }
 
 /**
@@ -86,7 +88,7 @@ export function detailedAnalysisPrompt(batch, changes) {
     }
   }
 
-  return `Analyze this code change for a developer portfolio:
+  return `Describe this code change factually:
 
 Commits:
 ${commits}
@@ -96,22 +98,27 @@ ${filesSummary || 'No file details available'}
 
 ${patchSummary ? `Code changes (sample):\n\`\`\`diff\n${patchSummary}\n\`\`\`` : ''}
 
-Write a professional description (under 150 words) covering:
-1. What was implemented/fixed/changed
-2. Key technical decisions or patterns used
-3. Impact of the change
+Write a FACTUAL technical description (under 100 words) covering:
+1. What was built/implemented/fixed (be specific)
+2. Technologies, frameworks, libraries used
+3. How components connect (e.g. "linked X with Y to achieve Z")
 
-Write in third person, technical but accessible tone.`;
+Rules:
+- No fluff, no marketing language
+- Be specific: "Implemented JWT authentication with bcrypt hashing" not "Added security features"
+- Name actual technologies and patterns used
+- Format: "[Action] [what] using [technologies] to [purpose]"`;
 }
 
 /**
  * Prompt for final portfolio summary
- * Synthesizes all batch analyses into cohesive narrative
+ * Synthesizes all batch analyses into cohesive factual summary
  * @param {Object[]} analyses - All batch analyses
  * @param {Object} repoInfo - Repository information
+ * @param {Object} stats - Work statistics (hours, sessions, etc.)
  * @returns {string} Prompt text
  */
-export function portfolioSummaryPrompt(analyses, repoInfo) {
+export function portfolioSummaryPrompt(analyses, repoInfo, stats = {}) {
   // Group by category
   const byCategory = {};
   for (const analysis of analyses) {
@@ -127,7 +134,7 @@ export function portfolioSummaryPrompt(analyses, repoInfo) {
       const categoryItems = items
         .sort((a, b) => (b.importance || 0) - (a.importance || 0))
         .slice(0, 5) // Top 5 per category
-        .map(a => `  - ${a.description}${a.detailedAnalysis ? ` (${a.batch.commits.length} commits)` : ''}`);
+        .map(a => `  - ${a.description}`);
       return `${category.toUpperCase()}:\n${categoryItems.join('\n')}`;
     })
     .join('\n\n');
@@ -136,25 +143,36 @@ export function portfolioSummaryPrompt(analyses, repoInfo) {
   const totalCommits = analyses.reduce((sum, a) => sum + a.batch.commits.length, 0);
   const dateRange = getDateRange(analyses);
 
-  return `Generate a portfolio-ready summary of contributions to this repository:
+  return `Generate a FACTUAL technical summary of contributions:
 
 Repository: ${repoInfo.name}
 ${repoInfo.description ? `Description: ${repoInfo.description}` : ''}
 ${repoInfo.languages ? `Languages: ${Object.keys(repoInfo.languages).join(', ')}` : ''}
 
-Contributions (${totalCommits} commits, ${dateRange}):
+Work done (${totalCommits} commits, ${dateRange}):
 ${contributions}
 
 Generate a markdown summary with these sections:
-1. **Overview** - 2-3 sentence summary of contributions
-2. **Key Contributions** - Bulleted list of significant work
-3. **Technical Highlights** - Technologies, patterns, or skills demonstrated
 
-Guidelines:
-- Write in first person ("I implemented...", "I designed...")
-- Professional but conversational tone
-- Focus on impact and technical depth
-- Keep total length under 400 words`;
+## Technical Work
+
+List what was actually built/implemented. Format each item as:
+"[Built/Implemented/Created] [specific thing] using [technologies] [optional: to achieve purpose]"
+
+Examples:
+- Built REST API with Express.js and PostgreSQL for user management
+- Implemented OAuth2 authentication flow linking frontend React app with backend JWT tokens
+- Created data pipeline using Python pandas to transform CSV exports into normalized database records
+
+## Technologies Used
+
+Bullet list of specific technologies, frameworks, libraries actually used in the code.
+
+Rules:
+- NO fluff, NO marketing speak, NO vague descriptions
+- Be specific and technical
+- Only include what was actually done based on the commits
+- Keep it under 300 words total`;
 }
 
 /**

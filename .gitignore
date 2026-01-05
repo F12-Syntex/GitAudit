@@ -20,5 +20,8 @@ npm-debug.log*
 dist/
 build/
 
+# Output directories
+reports/*.md
+
 # Local environment variables
 .env.local
