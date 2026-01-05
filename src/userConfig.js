@@ -25,6 +25,7 @@ const DEFAULTS = {
   website: '',
   linkedin: '',
   github: '',
+  excludedProjects: [],
 };
 
 /**
@@ -137,4 +138,40 @@ export function getAllConfig() {
  */
 export function resetConfig() {
   saveConfig(DEFAULTS);
+}
+
+/**
+ * Get excluded projects list
+ * @returns {string[]} Excluded project names
+ */
+export function getExcludedProjects() {
+  const config = getCVConfig();
+  return config.excludedProjects || [];
+}
+
+/**
+ * Add a project to exclusion list
+ * @param {string} projectName - Project name to exclude
+ */
+export function excludeProject(projectName) {
+  const config = getCVConfig();
+  const excluded = config.excludedProjects || [];
+  if (!excluded.includes(projectName)) {
+    excluded.push(projectName);
+    setCVConfigValue('excludedProjects', excluded);
+  }
+}
+
+/**
+ * Remove a project from exclusion list
+ * @param {string} projectName - Project name to include again
+ */
+export function includeProject(projectName) {
+  const config = getCVConfig();
+  const excluded = config.excludedProjects || [];
+  const index = excluded.indexOf(projectName);
+  if (index !== -1) {
+    excluded.splice(index, 1);
+    setCVConfigValue('excludedProjects', excluded);
+  }
 }

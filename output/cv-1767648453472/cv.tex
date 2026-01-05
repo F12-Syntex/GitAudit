@@ -1,0 +1,107 @@
+\documentclass[11pt,letterpaper]{article}
+
+% Required packages
+\usepackage[margin=0.75in]{geometry}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+
+% Setup hyperref
+\hypersetup{
+    colorlinks=true,
+    urlcolor=black
+}
+
+% Custom styles
+\titleformat{\section}{\Large\bfseries\centering}{\thesection}{0em}{}
+\titlespacing{\section}{0pt}{10pt}{10pt}
+
+% No page numbers
+\pagenumbering{gobble}
+
+% Adjust spacing
+\setlength{\parindent}{0em}
+\setlength{\parskip}{0.5em}
+
+% Custom commands
+\newcommand{\headertext}[1]{\begin{center}\textbf{\large #1}\end{center}}
+
+\begin{document}
+
+% Top navigation (omitted in actual template)
+% \begin{center}\textbf{BACK TO PRODUCTS}\end{center}
+
+% Name and title
+\begin{center}
+    \Huge{\textbf{Saifurahmaan Khan}}\\[0.2cm]
+    \large{Software Engineer}\\[0.5cm]
+\end{center}
+
+% Contact information
+\begin{center}
+    London, UK \quad | \quad eng.saifkhan2003@gmail.com \quad | \quad +44 7459 533082 \quad | \quad \href{https://www.linkedin.com/in/saif-khan-550b76247/}{\texttt{LinkedIn}}
+\end{center}
+
+\vspace{0.5cm}
+
+% Professional summary
+\begin{small}
+Highly motivated Software Engineer with experience in React, TypeScript, and JavaScript, seeking to contribute to the development of the Salt Design System. Proven ability to build full-stack applications, integrate AI, and deliver high-quality code. Passionate about open-source contributions and collaborative development.
+\end{small}
+
+\vspace{0.5cm}
+
+% Areas of expertise
+\headertext{SKILLS AND EXPERTISE}
+
+\begin{center}
+\begin{tabular}{p{0.22\textwidth}p{0.22\textwidth}p{0.22\textwidth}p{0.22\textwidth}}
+React     & TypeScript & JavaScript & HTML      \\
+CSS       & API dev    & Node.js    & Git       \\
+NextJS    & SQL        & AI Integr. & Vue       \\
+\end{tabular}
+\end{center}
+
+\vspace{0.5cm}
+
+% Professional experience
+\headertext{PROFESSIONAL EXPERIENCE}
+
+\vspace{0.2cm}
+
+\noindent\textbf{Co-Founder | Ascend Skilltree} \hfill \textbf{Nov 2025 - Present}
+
+\vspace{0.1cm}
+\small{Architecting AI-powered learning platform with personalized skill trees and adaptive difficulty algorithms. Building full-stack solution with Next.js, FastAPI, PostgreSQL, and AI integration via OpenRouter APIs.}
+
+\begin{itemize}[leftmargin=*, itemsep=0pt, parsep=0pt]
+    \item Architected AI-powered learning platform with personalized skill trees and adaptive difficulty algorithms.
+    \item Built full-stack solution with Next.js, FastAPI, PostgreSQL, and AI integration via OpenRouter APIs.
+    \item Implemented Skill Node Regeneration Functionality.
+    \item Enhanced Skill Node Expansion Logic.
+\end{itemize}
+
+\vspace{0.3cm}
+
+\noindent\textbf{Assistant Programmer | ReBenchDB – University of Kent} \hfill \textbf{2024}
+
+\vspace{0.1cm}
+\small{Enhanced data visualization for benchmark comparison tables; implemented theme customization system.}
+
+\begin{itemize}[leftmargin=*, itemsep=0pt, parsep=0pt]
+    \item Enhanced data visualization for benchmark comparison tables.
+    \item Implemented theme customization system.
+\end{itemize}
+
+\vspace{0.5cm}
+
+% Education
+\headertext{EDUCATION}
+
+\vspace{0.2cm}
+
+\noindent\textbf{BSc Software Engineering – First Class Honours} | University of Kent | Canterbury
+
+\end{document}

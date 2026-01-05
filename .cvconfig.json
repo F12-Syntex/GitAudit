@@ -1,6 +1,6 @@
 {
   "template": "default",
-  "model": "google/gemini-2.5-flash",
+  "model": "anthropic/claude-3.5-sonnet",
   "analysisModel": "google/gemini-2.0-flash-lite-001",
   "name": "Saifurahmaan Khan",
   "email": "eng.saifkhan2003@gmail.com",
@@ -8,5 +8,13 @@
   "location": "London, UK",
   "website": "",
   "linkedin": "https://www.linkedin.com/in/saif-khan-550b76247/",
-  "github": "https://github.com/F12-Syntex"
+  "github": "https://github.com/F12-Syntex",
+  "excludedProjects": [
+    "cvmaker",
+    "gitaudit",
+    "my-cv",
+    "ai-pastpaper-gen",
+    "MyCv",
+    "SleepSync"
+  ]
 }

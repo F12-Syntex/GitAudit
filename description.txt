@@ -1,0 +1,114 @@
+
+Skip to main content.
+
+
+
+
+
+View More Jobs
+
+Software Engineer III - Senior Associate with proficiency in React, Typescript and JavaScript.
+LONDON, LONDON, United Kingdom
+Apply Now
+Job Information
+Job Identification
+210619688
+Job Category
+Software Engineering
+Business Unit
+Commercial & Investment Bank
+Posting Date
+12/29/2025, 02:18 PM
+Locations
+ 25 Bank Street, Canary Wharf, London, Greater London, E14 5JP, GB
+Job Schedule
+Full time
+Job Description
+Are you a React developer seeking an exciting opportunity to contribute to the development of JP Morgan's Salt Design system? 
+
+Are you looking to be part of a collaborative team that values Open Source, leads the way in CIB UI strategy, and is actively building a design system while fostering a collaborative community around its products?
+
+The Front-end Development team at Digital Platform has an opening for an Associate role. As a Front-end developer, you will play a crucial role in the development and delivery of the Salt Design System. We leverage the latest UI technologies to deliver the maximum value to our stakeholders. 
+
+The Salt design System is the next generation UI Toolkit for CIB (Commercial & Investment Bank). It provides a comprehensive set of core UI components that can be used by different lines of business to create reusable patterns for their business applications. These components and guidelines are designed to accelerate application design and development, while ensuring consistency and accessibility (WCAG 2.1) through stable design foundations.
+
+Job responsibilities
+
+Develop and maintain high-quality React components for the Salt Design System.
+Collaborate with designers to implement UI designs and ensure consistency across our digital products.
+Work closely with product managers and other developers to understand requirements and deliver solutions that meet business needs.
+Write clean, efficient, and maintainable code, following best practices and coding standards.
+Conduct code reviews and provide constructive feedback to ensure code quality and adherence to standards.
+Stay up-to-date with the latest trends and technologies in front-end development, and actively contribute to the improvement of our development processes and tools.
+Adds to team culture of diversity, equity, inclusion, and respect
+Required qualifications, capabilities, and skills
+
+Existing proficiency in React, Typescript and JavaScript.
+Solid understanding of HTML, CSS, and responsive web design.
+Familiarity with modern front-end development tools and libraries (e.g. esbuild, rollup, vite).
+Knowledge of version control systems (e.g., Git) and collaborative development workflows.
+Excellent problem-solving and debugging skills.
+Strong communication and collaboration skills, with the ability to work effectively in a team environment.
+Emerging knowledge, opinion and  of software applications and technical processes within a technical discipline (e.g., cloud, artificial intelligence, machine learning, mobile, etc.)
+Preferred qualifications, capabilities, and skills
+
+Preferable experience in building reusable UI components or working with design systems.
+Familiarity with modern front-end technologies (e.g. NextJS, Remix)
+Asynchronous operations in Javascript (maybe using libraries such as Axios, RxJS)
+Familiarity with solving UI state management 
+Already contributes to an Open Source project
+Clean Code advocate
+An understanding of UI accessibility concerns
+Familiarity with one of JPM's existing design languages (UITK, MDS)
+About Us
+J.P. Morgan is a global leader in financial services, providing strategic advice and products to the world’s most prominent corporations, governments, wealthy individuals and institutional investors. Our first-class business in a first-class way approach to serving clients drives everything we do. We strive to build trusted, long-term partnerships to help our clients achieve their business objectives.
+  
+We recognize that our people are our strength and the diverse talents they bring to our global workforce are directly linked to our success. We are an equal opportunity employer and place a high value on diversity and inclusion at our company. We do not discriminate on the basis of any protected attribute, including race, religion, color, national origin, gender, sexual orientation, gender identity, gender expression, age, marital or veteran status, pregnancy or disability, or any other basis protected under applicable law. We also make reasonable accommodations for applicants’ and employees’ religious practices and beliefs, as well as mental health or physical disability needs. Visit our FAQs for more information about requesting an accommodation.
+About the Team
+J.P. Morgan’s Commercial & Investment Bank is a global leader across banking, markets, securities services and payments. Corporations, governments and institutions throughout the world entrust us with their business in more than 100 countries. The Commercial & Investment Bank provides strategic advice, raises capital, manages risk and extends liquidity in markets around the world. 
+Apply Now
+Similar Jobs
+
+Lead Software Engineer - Fullstack (ReactJS, JavaScript/TypeScript and Java) Developer
+LONDON, LONDON, United Kingdom  Posted on 01/05/2026
+Join a team that consistently enhances, builds, and delivers top-notch technology products.
+
+
+Software Engineer III - React
+LONDON, LONDON, United Kingdom  Posted on 11/06/2025
+Want to drive and develop exciting technology to power next generation banking solutions for businesses.
+
+
+Software Engineer III- React
+LONDON, LONDON, United Kingdom  Posted on 09/22/2025
+As a Front-End Engineer at JPMorgan Chase within the International Consumer Bank, you will be a part of a flat-structure organization.
+
+
+Java/React Full Stack Software Engineer III
+LONDON, LONDON, United Kingdom  Posted on 10/14/2025
+Design and deliver market-leading technology products in a secure and scalable way as a seasoned member of an agile team
+
+
+.
+Privacy & Terms
+Privacy & Security
+Terms of Use
+Cookie Policy
+.
+ 
+Equal Opportunities
+Recruitment Scams Warning
+.
+Useful Links
+chase.com
+jpmorganchase.com
+jpmorgan.com
+.
+ 
+Careers at Chase
+Careers in the Philippines
+© 2024 JPMorgan Chase & Co. All rights reserved.
+JPMorgan Chase & Co. is an equal opportunity employer and affirmative action employer Disability/Veteran.
+GLOBAL / 日本語 / 中文
+
+Page Software Engineer III - Senior Associate with proficiency in React, Typescript and JavaScript. - JPMC Candidate Experience page Careers loaded

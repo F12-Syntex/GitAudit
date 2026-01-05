@@ -15,7 +15,7 @@ import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSu
 import { countReportTokens, displayTokenReport } from './output/tokens.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
 import { generateCV } from './cv/generate.js';
-import { getCVConfig, setCVConfigValue, getAllConfig } from './userConfig.js';
+import { getCVConfig, setCVConfigValue, getAllConfig, getExcludedProjects, excludeProject, includeProject } from './userConfig.js';
 
 // ============================================================================
 // Utility Functions
@@ -73,15 +73,21 @@ ${chalk.bold('Quick Commands:')}
   yarn start big-export         Export all to single file
   yarn start import             Import markdown reports to cache
   yarn start generate-cv        Generate a tailored CV for a job
+  yarn start exclude            Manage excluded projects for CV
   yarn start config             View/edit configuration
   yarn start token-count        Count tokens in reports
   yarn start clear-cache        Clear all cached data
 
 ${chalk.bold('CV Generation:')}
   yarn start generate-cv                    Interactive mode
-  yarn start generate-cv <url>              From job posting URL
+  yarn start generate-cv "<url>"            From job posting URL (quote URLs with &)
   yarn start generate-cv "description..."   From job description text
-  yarn start generate-cv <url> --display    Open PDF after generation
+  yarn start generate-cv "path" --file      From file containing job description
+
+${chalk.bold('Project Exclusion:')}
+  yarn start exclude                        List excluded projects
+  yarn start exclude add <project>          Exclude a project from CV
+  yarn start exclude remove <project>       Include a project again
 
 ${chalk.bold('Configuration:')}
   yarn start config                         View all settings
@@ -395,12 +401,21 @@ async function cmdGenerateCV(args, options = {}) {
     return;
   }
 
-  // Parse args - could be a URL or job description
+  // Parse args - could be a URL, file path, or job description
   let jobDescription = null;
   let url = null;
 
   if (args) {
-    if (args.startsWith('http://') || args.startsWith('https://')) {
+    if (options.file) {
+      // Read job description from file
+      try {
+        jobDescription = await readFile(args, 'utf-8');
+        console.log(chalk.dim(`Read job description from ${args}\n`));
+      } catch (error) {
+        console.log(chalk.red(`Could not read file: ${args}\n`));
+        return;
+      }
+    } else if (args.startsWith('http://') || args.startsWith('https://')) {
       url = args;
     } else {
       jobDescription = args;
@@ -414,11 +429,21 @@ async function cmdGenerateCV(args, options = {}) {
       choices: [
         { name: 'Paste job description text', value: 'text' },
         { name: 'Enter URL to job posting', value: 'url' },
+        { name: 'Read from file', value: 'file' },
       ],
     });
 
     if (inputType === 'url') {
       url = await input({ message: 'Job posting URL:' });
+    } else if (inputType === 'file') {
+      const filePath = await input({ message: 'File path:' });
+      try {
+        jobDescription = await readFile(filePath, 'utf-8');
+        console.log(chalk.dim(`Read job description from ${filePath}\n`));
+      } catch {
+        console.log(chalk.red(`Could not read file: ${filePath}\n`));
+        return;
+      }
     } else {
       console.log(chalk.dim('Paste the job description (press Enter twice when done):'));
       const lines = [];
@@ -568,6 +593,56 @@ async function cmdImport(reportsDir = 'data/reports/repositories') {
     console.log(chalk.dim(`  ${errorCount} failed`));
   }
   console.log(chalk.cyan('─'.repeat(50) + '\n'));
+}
+
+async function cmdExclude(action, projectName) {
+  const excluded = getExcludedProjects();
+
+  if (!action) {
+    // List excluded projects
+    console.log(chalk.bold.cyan('\nExcluded Projects:\n'));
+    if (excluded.length === 0) {
+      console.log(chalk.dim('  No projects excluded. All projects will be included in CV generation.\n'));
+    } else {
+      for (const project of excluded) {
+        console.log(`  ${chalk.red('✗')} ${project}`);
+      }
+      console.log();
+    }
+    console.log(chalk.dim('Usage:'));
+    console.log(chalk.dim('  yarn start exclude add <project>    Exclude a project'));
+    console.log(chalk.dim('  yarn start exclude remove <project> Include a project again\n'));
+    return;
+  }
+
+  if (action === 'add') {
+    if (!projectName) {
+      console.log(chalk.red('Please specify a project name to exclude.\n'));
+      console.log(chalk.dim('Usage: yarn start exclude add <project-name>'));
+      return;
+    }
+    excludeProject(projectName);
+    console.log(chalk.green(`✓ Excluded "${projectName}" from CV generation.\n`));
+    return;
+  }
+
+  if (action === 'remove') {
+    if (!projectName) {
+      console.log(chalk.red('Please specify a project name to include.\n'));
+      console.log(chalk.dim('Usage: yarn start exclude remove <project-name>'));
+      return;
+    }
+    if (!excluded.includes(projectName)) {
+      console.log(chalk.yellow(`"${projectName}" is not in the exclusion list.\n`));
+      return;
+    }
+    includeProject(projectName);
+    console.log(chalk.green(`✓ "${projectName}" will now be included in CV generation.\n`));
+    return;
+  }
+
+  console.log(chalk.red(`Unknown action: ${action}`));
+  console.log(chalk.dim('Usage: yarn start exclude [add|remove] <project-name>\n'));
 }
 
 // ============================================================================
@@ -761,10 +836,13 @@ async function main() {
         await cmdImport(commandArg);
         break;
       case 'generate-cv':
-        await cmdGenerateCV(commandArg, { display: hasFlag('display') });
+        await cmdGenerateCV(commandArg, { display: true, file: hasFlag('file') });
         break;
       case 'config':
         await cmdConfig(commandArg, commands[2], commands[3]);
+        break;
+      case 'exclude':
+        await cmdExclude(commandArg, commands[2]);
         break;
       case 'clear-cache':
         await cmdClearCache();
