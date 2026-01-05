@@ -251,3 +251,130 @@ export function getAllRepoAnalyses() {
     ...data,
   }));
 }
+
+/**
+ * Import analysis from markdown content (for cache recovery)
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {string} markdownContent - Raw markdown file content
+ * @returns {Object} Parsed analysis object
+ */
+export function importAnalysisFromMarkdown(owner, repo, markdownContent) {
+  const lines = markdownContent.split('\n');
+
+  // Extract repo name from title
+  const titleMatch = lines[0]?.match(/^#\s+(.+)$/);
+  const repoName = titleMatch ? titleMatch[1] : repo;
+
+  // Extract description (line after title if not a header)
+  let description = '';
+  if (lines[2] && !lines[2].startsWith('#') && !lines[2].startsWith('**') && lines[2].trim()) {
+    description = lines[2].trim();
+  }
+
+  // Parse Work Summary section
+  const stats = {
+    totalCommits: 0,
+    totalAdditions: 0,
+    totalDeletions: 0,
+    estimatedHours: 0,
+    workSessions: 0,
+    filesChanged: 0,
+    firstCommit: null,
+    lastCommit: null,
+    byCategory: {},
+  };
+
+  // Extract Period
+  const periodMatch = markdownContent.match(/\*\*Period:\*\*\s*(.+?)\s*-\s*(.+?)$/m);
+  if (periodMatch) {
+    stats.firstCommit = new Date(periodMatch[1]).toISOString();
+    stats.lastCommit = new Date(periodMatch[2]).toISOString();
+  }
+
+  // Extract Commits count
+  const commitsMatch = markdownContent.match(/\*\*Commits:\*\*\s*(\d+)/);
+  if (commitsMatch) stats.totalCommits = parseInt(commitsMatch[1], 10);
+
+  // Extract Lines Changed
+  const linesMatch = markdownContent.match(/\*\*Lines Changed:\*\*\s*\+(\d+)\s*\/\s*-(\d+)/);
+  if (linesMatch) {
+    stats.totalAdditions = parseInt(linesMatch[1], 10);
+    stats.totalDeletions = parseInt(linesMatch[2], 10);
+  }
+
+  // Extract Files Modified
+  const filesMatch = markdownContent.match(/\*\*Files Modified:\*\*\s*(\d+)/);
+  if (filesMatch) stats.filesChanged = parseInt(filesMatch[1], 10);
+
+  // Extract Estimated Work
+  const workMatch = markdownContent.match(/\*\*Estimated Work:\*\*\s*~([\d.]+)\s*hours?\s*\((\d+)\s*sessions?\)/);
+  if (workMatch) {
+    stats.estimatedHours = parseFloat(workMatch[1]);
+    stats.workSessions = parseInt(workMatch[2], 10);
+  }
+
+  // Extract Languages
+  const languagesMatch = markdownContent.match(/\*\*Languages:\*\*\s*(.+?)$/m);
+  const languages = {};
+  if (languagesMatch) {
+    languagesMatch[1].split(',').map(l => l.trim()).filter(Boolean).forEach(lang => {
+      languages[lang] = 1;
+    });
+  }
+
+  // Extract Work Breakdown categories
+  const breakdownSection = markdownContent.match(/### Work Breakdown\s*\n([\s\S]*?)(?=\n##|\n---|\n\*Generated|$)/);
+  if (breakdownSection) {
+    const categoryMatches = breakdownSection[1].matchAll(/- \*\*(\w+):\*\*\s*(\d+)/g);
+    for (const match of categoryMatches) {
+      stats.byCategory[match[1].toLowerCase()] = parseInt(match[2], 10);
+    }
+  }
+
+  // Extract Summary section
+  let summaryText = '';
+  const summaryMatch = markdownContent.match(/## Summary\s*\n([\s\S]*?)(?=\n## |\n---|\n\*Generated|$)/);
+  if (summaryMatch) {
+    summaryText = summaryMatch[1].trim();
+  }
+
+  // Extract Implementation Details
+  let implementationDetails = '';
+  const implMatch = markdownContent.match(/## Implementation Details\s*\n([\s\S]*?)(?=\n## |\n---|\n\*Generated|$)/);
+  if (implMatch) {
+    implementationDetails = implMatch[1].trim();
+  }
+
+  // Build the analysis object
+  const analysis = {
+    repoInfo: {
+      name: repoName,
+      description,
+      languages,
+      owner: { login: owner },
+    },
+    analyses: implementationDetails ? [{
+      detailedAnalysis: implementationDetails,
+      batch: { commits: [] },
+    }] : [],
+    summary: summaryText ? { summary: summaryText } : null,
+    stats,
+    cachedAt: new Date().toISOString(),
+    importedFromMarkdown: true,
+  };
+
+  // Save to cache
+  const key = `${owner}/${repo}`;
+  cacheStore.set(`repoAnalysis.${key}`, analysis);
+
+  // Also mark as analyzed
+  cacheStore.set(`analyzedRepos.${key}`, {
+    analyzedAt: new Date().toISOString(),
+    commitCount: stats.totalCommits,
+    batchCount: Object.values(stats.byCategory).reduce((a, b) => a + b, 0) || 1,
+    importedFromMarkdown: true,
+  });
+
+  return analysis;
+}

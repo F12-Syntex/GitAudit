@@ -1,60 +1,24 @@
 #!/usr/bin/env node
 
 import chalk from 'chalk';
-import readline from 'readline';
-import { config, validateConfig, validateOpenRouterConfig } from './config.js';
-import { authenticate, logout, getAuthenticatedOctokit } from './auth.js';
+import { select, confirm, input } from '@inquirer/prompts';
+import { validateConfig, validateOpenRouterConfig } from './config.js';
+import { authenticate, logout } from './auth.js';
 import { listRepositories, displayRepositories, getRepositoryDetails } from './github.js';
 import { isAuthenticated, getUser } from './storage.js';
 import { fetchUserCommits, filterCommits, getCommitStats } from './commits/fetch.js';
 import { batchCommitsByFeature, analyzeCommitBatches, generatePortfolioSummary, getAnalysisStats } from './commits/analyze.js';
-import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses, clearRepoCache, clearAllCaches, clearAnalyzedStatus } from './commits/cache.js';
+import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses, clearRepoCache, clearAllCaches, clearAnalyzedStatus, importAnalysisFromMarkdown } from './commits/cache.js';
+import { readFile, readdir } from 'fs/promises';
+import { join, basename } from 'path';
 import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSummary, generateBigExport } from './output/markdown.js';
 import { countReportTokens, displayTokenReport } from './output/tokens.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
 
-function showHelp() {
-  console.log(`
-${chalk.bold.cyan('GitAudit')} - GitHub Portfolio Analyzer
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
-${chalk.bold('Usage:')}
-  npm start              Show status and help
-  npm run auth           Authenticate with GitHub
-  npm run list           List all repositories
-  npm run analyze        Analyze your contributions
-  npm run analyze-all    Analyze all unanalyzed repos
-  npm run export         Export cached analyses to files
-
-${chalk.bold('Commands:')}
-  --auth                 Authenticate with GitHub (OAuth device flow)
-  --logout               Remove saved authentication
-  --list                 List all your repositories (public & private)
-  --analyze              Analyze contributions (interactive repo picker)
-  --analyze owner/repo   Analyze a specific repository
-  --analyze-all          Analyze all unanalyzed repositories
-  --force                Re-analyze ignoring cache (use with --analyze)
-  --export <dir>         Export all cached analyses to markdown files
-  --export owner/repo    Export a specific cached analysis
-  --big-export           Export all reports into a single file (reports/report.md)
-  --token-count          Count tokens in all report files
-  --clear-cache          Clear all cached data
-  --help                 Show this help message
-
-${chalk.bold('Setup:')}
-  1. Create a GitHub OAuth App at ${chalk.underline('https://github.com/settings/developers')}
-  2. Copy ${chalk.yellow('.env.example')} to ${chalk.yellow('.env')}
-  3. Add your GitHub Client ID to ${chalk.yellow('.env')}
-  4. Add your OpenRouter API key for analysis features
-  5. Run ${chalk.cyan('npm run auth')} to authenticate
-  6. Run ${chalk.cyan('npm run analyze')} to analyze your contributions
-`);
-}
-
-/**
- * Format milliseconds as human-readable duration
- * @param {number} ms - Milliseconds
- * @returns {string} Formatted duration (e.g., "2m 30s")
- */
 function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -69,82 +33,93 @@ function formatDuration(ms) {
   }
 }
 
-function showStatus() {
-  console.log(chalk.bold.cyan('\n  GitAudit Status\n'));
+function clearScreen() {
+  console.clear();
+}
 
+function showBanner() {
+  console.log(chalk.bold.cyan(`
+   ╔═══════════════════════════════════════╗
+   ║          ${chalk.white('GitAudit')}                     ║
+   ║   ${chalk.dim('GitHub Portfolio Analyzer')}           ║
+   ╚═══════════════════════════════════════╝
+`));
+}
+
+function showStatus() {
   if (isAuthenticated()) {
     const user = getUser();
-    console.log(`  ${chalk.green('✓')} Authenticated as ${chalk.bold(user?.login || 'Unknown')}`);
+    console.log(`  ${chalk.green('●')} Logged in as ${chalk.bold(user?.login || 'Unknown')}\n`);
   } else {
-    console.log(`  ${chalk.yellow('○')} Not authenticated`);
-    console.log(`    Run ${chalk.cyan('npm run auth')} to connect your GitHub account`);
+    console.log(`  ${chalk.yellow('○')} Not logged in\n`);
   }
-
-  console.log();
 }
 
-/**
- * Interactive repository selection
- * @param {Object[]} repos - List of repositories
- * @returns {Promise<Object>} Selected repository
- */
+function showHelp() {
+  console.log(`
+${chalk.bold.cyan('GitAudit')} - GitHub Portfolio Analyzer
+
+${chalk.bold('Quick Commands:')}
+  yarn start                    Interactive menu
+  yarn start auth               Login to GitHub
+  yarn start logout             Logout from GitHub
+  yarn start list               List all repositories
+  yarn start analyze            Analyze repos (interactive picker)
+  yarn start analyze owner/repo Analyze specific repository
+  yarn start analyze-all        Analyze all unanalyzed repos
+  yarn start export             Export cached analyses to files
+  yarn start big-export         Export all to single file
+  yarn start import             Import markdown reports to cache
+  yarn start token-count        Count tokens in reports
+  yarn start clear-cache        Clear all cached data
+
+${chalk.bold('Options:')}
+  --force                       Re-analyze ignoring cache
+
+${chalk.bold('Examples:')}
+  yarn start analyze myuser/myrepo --force
+  yarn start export ./my-reports
+`);
+}
+
+// ============================================================================
+// Core Functions
+// ============================================================================
+
 async function selectRepository(repos) {
-  console.log(chalk.bold('\nSelect a repository to analyze:\n'));
-
-  // Show numbered list of repos (limited to 20 for readability)
-  const displayRepos = repos.slice(0, 20);
-  displayRepos.forEach((repo, i) => {
+  const choices = repos.slice(0, 30).map((repo) => {
     const visibility = repo.private ? chalk.yellow('[P]') : chalk.green('[O]');
-    const language = repo.language ? chalk.dim(` (${repo.language})`) : '';
-    console.log(`  ${chalk.cyan((i + 1).toString().padStart(2))}. ${visibility} ${chalk.bold(repo.name)}${language}`);
+    const language = repo.language ? chalk.dim(` · ${repo.language}`) : '';
+    return {
+      name: `${visibility} ${repo.name}${language}`,
+      value: repo,
+    };
   });
 
-  if (repos.length > 20) {
-    console.log(chalk.dim(`\n  ... and ${repos.length - 20} more repositories`));
-    console.log(chalk.dim(`  Use --analyze owner/repo for repositories not shown`));
+  if (repos.length > 30) {
+    choices.push({
+      name: chalk.dim(`... and ${repos.length - 30} more (use: yarn start analyze owner/repo)`),
+      value: null,
+      disabled: true,
+    });
   }
 
-  console.log();
-
-  // Get user input
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+  const selected = await select({
+    message: 'Select a repository',
+    choices,
+    pageSize: 15,
   });
 
-  return new Promise((resolve) => {
-    rl.question(chalk.cyan('  Enter number (1-' + displayRepos.length + '): '), (answer) => {
-      rl.close();
-      const num = parseInt(answer, 10);
-
-      if (isNaN(num) || num < 1 || num > displayRepos.length) {
-        console.log(chalk.red('\nInvalid selection. Please try again.'));
-        process.exit(1);
-      }
-
-      resolve(displayRepos[num - 1]);
-    });
-  });
+  return selected;
 }
 
-/**
- * Analyze a repository's commits
- * @param {string} owner - Repository owner
- * @param {string} repo - Repository name
- * @param {Object} options - Analysis options
- * @param {boolean} options.force - Force re-fetch, ignore cache
- * @returns {Promise<Object>} Analysis results
- */
 async function analyzeRepository(owner, repo, options = {}) {
   console.log(chalk.bold.cyan(`\nAnalyzing ${owner}/${repo}...\n`));
 
-  // Reset token tracking for this analysis
   resetUsageTracking();
 
-  // Get repository details
   const repoInfo = await getRepositoryDetails(owner, repo);
 
-  // Check cache for commits (unless force mode)
   let commits;
   const cached = options.force ? null : getCachedCommits(owner, repo);
 
@@ -157,10 +132,7 @@ async function analyzeRepository(owner, repo, options = {}) {
       clearRepoCache(owner, repo);
       clearAnalyzedStatus(owner, repo);
     }
-    // Fetch commits from GitHub
     commits = await fetchUserCommits(owner, repo);
-
-    // Cache for future use
     cacheCommits(owner, repo, commits);
   }
 
@@ -174,30 +146,18 @@ async function analyzeRepository(owner, repo, options = {}) {
     };
   }
 
-  // Filter commits (remove merge commits, bots, etc.)
   const filteredCommits = filterCommits(commits);
   console.log(chalk.dim(`Filtered to ${filteredCommits.length} relevant commits`));
 
-  // Get commit stats
   const stats = getCommitStats(filteredCommits);
-
-  // Batch commits by feature/time
   const batches = batchCommitsByFeature(filteredCommits);
   console.log(chalk.dim(`Organized into ${batches.length} batches`));
 
-  // Analyze batches with LLM
   const analyses = await analyzeCommitBatches(batches, owner, repo);
-
-  // Get analysis stats
   const analysisStats = getAnalysisStats(analyses);
-
-  // Generate portfolio summary
   const summary = await generatePortfolioSummary(analyses, repoInfo);
-
-  // Get total usage
   const totalUsage = getUsageReport();
 
-  // Mark repo as analyzed
   markRepoAnalyzed(owner, repo, {
     commitCount: filteredCommits.length,
     batchCount: batches.length,
@@ -211,284 +171,458 @@ async function analyzeRepository(owner, repo, options = {}) {
     totalUsage,
   };
 
-  // Cache the full analysis result
   saveRepoAnalysis(owner, repo, result);
 
-  // Auto-export to reports folder
   const markdown = generateMarkdownReport(result);
   await exportToFile(markdown, `reports/repositories/${repo}.md`);
 
   return result;
 }
 
+// ============================================================================
+// Command Handlers
+// ============================================================================
+
+async function cmdAuth() {
+  await authenticate();
+  console.log(chalk.green('\n✓ Authentication successful!\n'));
+}
+
+async function cmdLogout() {
+  await logout();
+}
+
+async function cmdList() {
+  if (!isAuthenticated()) {
+    console.log(chalk.yellow('Not authenticated. Please login first.\n'));
+    await authenticate();
+  }
+  const repos = await listRepositories();
+  displayRepositories(repos);
+}
+
+async function cmdAnalyze(repoArg, options = {}) {
+  if (!isAuthenticated()) {
+    console.log(chalk.yellow('Not authenticated. Please login first.\n'));
+    await authenticate();
+  }
+
+  validateOpenRouterConfig();
+
+  let owner, repo;
+
+  if (repoArg && repoArg.includes('/')) {
+    [owner, repo] = repoArg.split('/');
+  } else {
+    const repos = await listRepositories();
+    const selected = await selectRepository(repos);
+    if (!selected) return;
+    owner = selected.owner.login;
+    repo = selected.name;
+  }
+
+  const startTime = Date.now();
+  const analysis = await analyzeRepository(owner, repo, options);
+  const elapsed = Date.now() - startTime;
+
+  displayReport(analysis);
+  console.log(chalk.dim(`\nCompleted in ${formatDuration(elapsed)}`));
+}
+
+async function cmdAnalyzeAll(options = {}) {
+  if (!isAuthenticated()) {
+    console.log(chalk.yellow('Not authenticated. Please login first.\n'));
+    await authenticate();
+  }
+
+  validateOpenRouterConfig();
+
+  const repos = await listRepositories();
+  const unanalyzedRepos = repos.filter(r => !isRepoAnalyzed(r.owner.login, r.name));
+
+  if (unanalyzedRepos.length === 0) {
+    console.log(chalk.green('\n✓ All repositories have been analyzed!'));
+    const analyzed = getAnalyzedRepos();
+    console.log(chalk.dim(`  ${analyzed.length} repos in cache\n`));
+    return;
+  }
+
+  console.log(chalk.bold.cyan(`\nAnalyzing ${unanalyzedRepos.length} repositories...\n`));
+  console.log(chalk.dim(`(${repos.length - unanalyzedRepos.length} already cached, skipping)\n`));
+
+  const startTime = Date.now();
+  let successCount = 0;
+  let skipCount = 0;
+
+  for (let i = 0; i < unanalyzedRepos.length; i++) {
+    const repo = unanalyzedRepos[i];
+    const owner = repo.owner.login;
+    const repoName = repo.name;
+
+    console.log(chalk.cyan(`[${i + 1}/${unanalyzedRepos.length}] ${owner}/${repoName}`));
+
+    try {
+      const analysis = await analyzeRepository(owner, repoName, options);
+
+      if (analysis.stats.totalCommits === 0) {
+        console.log(chalk.dim('  No commits by you, skipping...\n'));
+        skipCount++;
+        continue;
+      }
+
+      successCount++;
+      console.log(chalk.dim(`  ${analysis.stats.totalCommits} commits, ${analysis.stats.totalBatches || 0} batches\n`));
+    } catch (error) {
+      console.log(chalk.red(`  Error: ${error.message}\n`));
+    }
+
+    const elapsed = Date.now() - startTime;
+    const avgTime = elapsed / (i + 1);
+    const remaining = unanalyzedRepos.length - (i + 1);
+    const eta = remaining * avgTime;
+
+    if (remaining > 0) {
+      console.log(chalk.dim(`  Elapsed: ${formatDuration(elapsed)} | ETA: ${formatDuration(eta)}\n`));
+    }
+  }
+
+  const allCached = getAllRepoAnalyses();
+  if (allCached.length > 0) {
+    const summaryMarkdown = generateCombinedSummary(allCached);
+    await exportToFile(summaryMarkdown, 'reports/summary.md');
+  }
+
+  const totalElapsed = Date.now() - startTime;
+  console.log(chalk.cyan('\n' + '─'.repeat(50)));
+  console.log(chalk.bold.green(`✓ Analyzed ${successCount} repositories in ${formatDuration(totalElapsed)}`));
+  if (skipCount > 0) {
+    console.log(chalk.dim(`  Skipped ${skipCount} repos (no commits)`));
+  }
+  console.log(chalk.dim(`  Reports saved to reports/`));
+  console.log(chalk.cyan('─'.repeat(50) + '\n'));
+}
+
+async function cmdExport(exportArg) {
+  const allAnalyses = getAllRepoAnalyses();
+
+  if (allAnalyses.length === 0) {
+    console.log(chalk.yellow('No cached analyses found. Run analyze first.\n'));
+    return;
+  }
+
+  if (exportArg && exportArg.includes('/')) {
+    const [owner, repo] = exportArg.split('/');
+    const analysis = getRepoAnalysis(owner, repo);
+    if (!analysis) {
+      console.log(chalk.red(`No cached analysis for ${exportArg}`));
+      console.log(chalk.dim('Available: ' + allAnalyses.map(a => a.repoKey).join(', ')));
+      return;
+    }
+    const markdown = generateMarkdownReport(analysis);
+    await exportToFile(markdown, `reports/repositories/${repo}.md`);
+  } else {
+    const baseDir = exportArg || './reports';
+    console.log(chalk.bold.cyan(`\nExporting ${allAnalyses.length} analyses to ${baseDir}/\n`));
+
+    for (const analysis of allAnalyses) {
+      const repoName = analysis.repoKey.split('/')[1];
+      const markdown = generateMarkdownReport(analysis);
+      await exportToFile(markdown, `${baseDir}/repositories/${repoName}.md`);
+    }
+
+    const summaryMarkdown = generateCombinedSummary(allAnalyses);
+    await exportToFile(summaryMarkdown, `${baseDir}/summary.md`);
+
+    console.log(chalk.green(`\n✓ Exported ${allAnalyses.length} reports to ${baseDir}/\n`));
+  }
+}
+
+async function cmdBigExport() {
+  const allAnalyses = getAllRepoAnalyses();
+  if (allAnalyses.length === 0) {
+    console.log(chalk.yellow('No cached analyses found. Run analyze first.\n'));
+    return;
+  }
+  const bigReport = generateBigExport(allAnalyses);
+  await exportToFile(bigReport, 'reports/report.md');
+  console.log(chalk.green(`\n✓ Exported ${allAnalyses.length} repositories to reports/report.md\n`));
+}
+
+async function cmdTokenCount() {
+  const tokenStats = await countReportTokens('reports');
+  if (tokenStats.totals.totalFiles === 0) {
+    console.log(chalk.yellow('No report files found in reports/\n'));
+    console.log(chalk.dim('Run analyze first to generate reports.'));
+    return;
+  }
+  displayTokenReport(tokenStats);
+}
+
+async function cmdClearCache() {
+  const confirmed = await confirm({
+    message: 'Clear all cached data?',
+    default: false,
+  });
+
+  if (confirmed) {
+    clearAllCaches();
+    console.log(chalk.green('\n✓ All caches cleared.\n'));
+  }
+}
+
+async function cmdImport(reportsDir = 'reports/repositories') {
+  if (!isAuthenticated()) {
+    console.log(chalk.yellow('Not authenticated. Please login first to determine owner.\n'));
+    await authenticate();
+  }
+
+  const user = getUser();
+  const owner = user?.login;
+
+  if (!owner) {
+    console.log(chalk.red('Could not determine GitHub username. Please login first.\n'));
+    return;
+  }
+
+  console.log(chalk.bold.cyan(`\nImporting reports from ${reportsDir}/\n`));
+
+  let files;
+  try {
+    files = await readdir(reportsDir);
+  } catch {
+    console.log(chalk.red(`Could not read directory: ${reportsDir}\n`));
+    return;
+  }
+
+  const mdFiles = files.filter(f => f.endsWith('.md'));
+
+  if (mdFiles.length === 0) {
+    console.log(chalk.yellow('No markdown files found.\n'));
+    return;
+  }
+
+  let importCount = 0;
+  let errorCount = 0;
+
+  for (const file of mdFiles) {
+    const repoName = basename(file, '.md');
+    const filePath = join(reportsDir, file);
+
+    try {
+      const content = await readFile(filePath, 'utf-8');
+      importAnalysisFromMarkdown(owner, repoName, content);
+      console.log(chalk.green(`  ✓ ${repoName}`));
+      importCount++;
+    } catch (error) {
+      console.log(chalk.red(`  ✗ ${repoName}: ${error.message}`));
+      errorCount++;
+    }
+  }
+
+  console.log(chalk.cyan('\n' + '─'.repeat(50)));
+  console.log(chalk.bold.green(`✓ Imported ${importCount} reports to cache`));
+  if (errorCount > 0) {
+    console.log(chalk.dim(`  ${errorCount} failed`));
+  }
+  console.log(chalk.cyan('─'.repeat(50) + '\n'));
+}
+
+// ============================================================================
+// Interactive Menu
+// ============================================================================
+
+async function showMainMenu() {
+  const cached = getAllRepoAnalyses();
+
+  const choices = [];
+
+  if (!isAuthenticated()) {
+    choices.push({ name: '🔑  Login to GitHub', value: 'auth' });
+  } else {
+    choices.push(
+      { name: '📋  List repositories', value: 'list' },
+      { name: '🔍  Analyze repository', value: 'analyze' },
+      { name: `⚡  Analyze all unanalyzed repos`, value: 'analyze-all' },
+    );
+
+    if (cached.length > 0) {
+      choices.push(
+        { name: `📁  Export reports (${cached.length} cached)`, value: 'export' },
+        { name: '📄  Export all to single file', value: 'big-export' },
+        { name: '🔢  Count tokens in reports', value: 'token-count' },
+      );
+    } else {
+      choices.push(
+        { name: '📥  Import reports to cache', value: 'import' },
+      );
+    }
+
+    choices.push(
+      { name: '🗑️   Clear cache', value: 'clear-cache' },
+      { name: '🚪  Logout', value: 'logout' },
+    );
+  }
+
+  choices.push({ name: chalk.dim('Exit'), value: 'exit' });
+
+  const action = await select({
+    message: 'What would you like to do?',
+    choices,
+    pageSize: 12,
+  });
+
+  return action;
+}
+
+async function interactiveMode() {
+  clearScreen();
+  showBanner();
+  showStatus();
+
+  while (true) {
+    try {
+      const action = await showMainMenu();
+
+      if (action === 'exit') {
+        console.log(chalk.dim('\nGoodbye!\n'));
+        break;
+      }
+
+      console.log();
+
+      switch (action) {
+        case 'auth':
+          await cmdAuth();
+          break;
+        case 'logout':
+          await cmdLogout();
+          break;
+        case 'list':
+          await cmdList();
+          break;
+        case 'analyze':
+          await cmdAnalyze();
+          break;
+        case 'analyze-all':
+          await cmdAnalyzeAll();
+          break;
+        case 'export':
+          await cmdExport();
+          break;
+        case 'big-export':
+          await cmdBigExport();
+          break;
+        case 'token-count':
+          await cmdTokenCount();
+          break;
+        case 'import':
+          await cmdImport();
+          break;
+        case 'clear-cache':
+          await cmdClearCache();
+          break;
+      }
+
+      // Pause before showing menu again
+      await input({ message: chalk.dim('Press Enter to continue...') });
+      clearScreen();
+      showBanner();
+      showStatus();
+
+    } catch (error) {
+      if (error.name === 'ExitPromptError') {
+        console.log(chalk.dim('\nGoodbye!\n'));
+        break;
+      }
+      console.error(chalk.red('\nError:'), error.message);
+      if (process.env.DEBUG) console.error(error);
+    }
+  }
+}
+
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
 async function main() {
   const args = process.argv.slice(2);
 
-  // Helper to check for command (with or without --)
-  const hasCommand = (cmd) => args.includes(`--${cmd}`) || args.includes(cmd);
-  const getCommandIndex = (cmd) => {
-    const idx = args.indexOf(`--${cmd}`);
-    return idx !== -1 ? idx : args.indexOf(cmd);
-  };
+  // Parse flags
+  const hasFlag = (flag) => args.includes(`--${flag}`) || args.includes(`-${flag[0]}`);
+  const forceMode = hasFlag('force');
+  const options = { force: forceMode };
 
-  // Help command doesn't need config validation
-  if (hasCommand('help') || args.includes('-h')) {
+  // Get positional args (commands without --)
+  const commands = args.filter(a => !a.startsWith('-'));
+  const command = commands[0];
+  const commandArg = commands[1];
+
+  // Help
+  if (hasFlag('help') || command === 'help') {
     showHelp();
     return;
   }
 
-  // Show status if no args
+  // No args = interactive mode
   if (args.length === 0) {
-    showStatus();
-    showHelp();
+    await interactiveMode();
     return;
   }
 
-  // Logout doesn't need config validation
-  if (hasCommand('logout')) {
-    await logout();
-    return;
+  // Validate config for most commands
+  if (!['auth', 'logout', 'help', 'clear-cache', 'import', 'token-count', 'big-export'].includes(command)) {
+    validateConfig();
   }
-
-  // Clear cache command
-  if (hasCommand('clear-cache')) {
-    clearAllCaches();
-    console.log(chalk.green('All caches cleared.'));
-    return;
-  }
-
-  // Token count command
-  if (hasCommand('token-count')) {
-    const tokenStats = await countReportTokens('reports');
-    if (tokenStats.totals.totalFiles === 0) {
-      console.log(chalk.yellow('No report files found in reports/ directory.'));
-      console.log(chalk.dim('Run --analyze or --analyze-all first to generate reports.'));
-      return;
-    }
-    displayTokenReport(tokenStats);
-    return;
-  }
-
-  // Big export command - single file with all reports
-  if (hasCommand('big-export')) {
-    const allAnalyses = getAllRepoAnalyses();
-    if (allAnalyses.length === 0) {
-      console.log(chalk.yellow('No cached analyses found. Run --analyze first.'));
-      return;
-    }
-    const bigReport = generateBigExport(allAnalyses);
-    await exportToFile(bigReport, 'reports/report.md');
-    console.log(chalk.green(`\nExported ${allAnalyses.length} repositories to a single file.`));
-    return;
-  }
-
-  // All other commands need config
-  validateConfig();
 
   try {
-    if (hasCommand('auth')) {
-      await authenticate();
-      console.log(chalk.dim('\nYou can now run: npm run list'));
-    } else if (hasCommand('list')) {
-      if (!isAuthenticated()) {
-        console.log(chalk.yellow('Not authenticated. Starting authentication...\n'));
-        await authenticate();
-        console.log();
-      }
-
-      const repos = await listRepositories();
-      displayRepositories(repos);
-    } else if (hasCommand('export') && !hasCommand('analyze') && !hasCommand('analyze-all')) {
-      // Standalone export from cache
-      const exportIndex = getCommandIndex('export');
-      const exportArg = args[exportIndex + 1];
-
-      const allAnalyses = getAllRepoAnalyses();
-
-      if (allAnalyses.length === 0) {
-        console.log(chalk.yellow('No cached analyses found. Run --analyze first.'));
-        return;
-      }
-
-      // Check if exporting specific repo or all
-      if (exportArg && exportArg.includes('/') && !exportArg.startsWith('-')) {
-        // Export specific repo
-        const analysis = getRepoAnalysis(exportArg.split('/')[0], exportArg.split('/')[1]);
-        if (!analysis) {
-          console.log(chalk.red(`No cached analysis for ${exportArg}`));
-          console.log(chalk.dim('Available: ' + allAnalyses.map(a => a.repoKey).join(', ')));
-          return;
+    switch (command) {
+      case 'auth':
+        await cmdAuth();
+        break;
+      case 'logout':
+        await cmdLogout();
+        break;
+      case 'list':
+        await cmdList();
+        break;
+      case 'analyze':
+        await cmdAnalyze(commandArg, options);
+        break;
+      case 'analyze-all':
+        await cmdAnalyzeAll(options);
+        break;
+      case 'export':
+        await cmdExport(commandArg);
+        break;
+      case 'big-export':
+        await cmdBigExport();
+        break;
+      case 'token-count':
+        await cmdTokenCount();
+        break;
+      case 'import':
+        await cmdImport(commandArg);
+        break;
+      case 'clear-cache':
+        await cmdClearCache();
+        break;
+      default:
+        // Check for old --command style
+        if (args[0]?.startsWith('--')) {
+          const oldCmd = args[0].replace('--', '');
+          console.log(chalk.yellow(`Hint: Use "yarn start ${oldCmd}" instead of "--${oldCmd}"\n`));
         }
-        const repoName = exportArg.split('/')[1];
-        const markdown = generateMarkdownReport(analysis);
-        const filename = `reports/repositories/${repoName}.md`;
-        await exportToFile(markdown, filename);
-      } else {
-        // Export all to structured directory
-        const baseDir = exportArg || './reports';
-        console.log(chalk.bold.cyan(`\nExporting ${allAnalyses.length} cached analyses to ${baseDir}/\n`));
-
-        // Export individual repo reports
-        for (const analysis of allAnalyses) {
-          const repoName = analysis.repoKey.split('/')[1];
-          const filename = `${baseDir}/repositories/${repoName}.md`;
-          const markdown = generateMarkdownReport(analysis);
-          await exportToFile(markdown, filename);
-        }
-
-        // Export combined summary
-        const summaryMarkdown = generateCombinedSummary(allAnalyses);
-        await exportToFile(summaryMarkdown, `${baseDir}/summary.md`);
-
-        console.log(chalk.green(`\nExported ${allAnalyses.length} reports to ${baseDir}/`));
-        console.log(chalk.dim(`  ${baseDir}/summary.md - Combined overview`));
-        console.log(chalk.dim(`  ${baseDir}/repositories/<repo>.md - Individual reports`));
-      }
-    } else if (hasCommand('analyze-all')) {
-      if (!isAuthenticated()) {
-        console.log(chalk.yellow('Not authenticated. Starting authentication...\n'));
-        await authenticate();
-        console.log();
-      }
-
-      // Validate OpenRouter config
-      validateOpenRouterConfig();
-
-      // Get all repos
-      const repos = await listRepositories();
-
-      // Filter to unanalyzed repos
-      const unanalyzedRepos = repos.filter(r => !isRepoAnalyzed(r.owner.login, r.name));
-
-      if (unanalyzedRepos.length === 0) {
-        console.log(chalk.green('All repositories have been analyzed!'));
-        const analyzed = getAnalyzedRepos();
-        console.log(chalk.dim(`(${analyzed.length} repos analyzed)`));
-        return;
-      }
-
-      console.log(chalk.bold.cyan(`\nAnalyzing ${unanalyzedRepos.length} unanalyzed repositories...\n`));
-      console.log(chalk.dim(`(${repos.length - unanalyzedRepos.length} already analyzed, skipping)\n`));
-
-      // Check for force flag
-      const forceMode = hasCommand('force');
-
-      const results = [];
-      let successCount = 0;
-      let skipCount = 0;
-      const analysisStartTime = Date.now();
-
-      for (let i = 0; i < unanalyzedRepos.length; i++) {
-        const repo = unanalyzedRepos[i];
-        const owner = repo.owner.login;
-        const repoName = repo.name;
-
-        console.log(chalk.cyan(`[${i + 1}/${unanalyzedRepos.length}] ${owner}/${repoName}`));
-
-        try {
-          const analysis = await analyzeRepository(owner, repoName, { force: forceMode });
-
-          if (analysis.stats.totalCommits === 0) {
-            console.log(chalk.dim('  No commits by you, skipping...\n'));
-            skipCount++;
-            continue;
-          }
-
-          results.push(analysis);
-          successCount++;
-
-          // Brief summary for console (individual reports auto-exported by analyzeRepository)
-          console.log(chalk.dim(`  ${analysis.stats.totalCommits} commits, ${analysis.stats.totalBatches || 0} batches\n`));
-        } catch (error) {
-          console.log(chalk.red(`  Error: ${error.message}\n`));
-        }
-
-        // Show elapsed time and ETA
-        const elapsed = Date.now() - analysisStartTime;
-        const avgTimePerRepo = elapsed / (i + 1);
-        const remaining = unanalyzedRepos.length - (i + 1);
-        const eta = remaining * avgTimePerRepo;
-
-        if (remaining > 0) {
-          console.log(chalk.dim(`  Elapsed: ${formatDuration(elapsed)} | ETA: ${formatDuration(eta)} (${remaining} repos left)\n`));
-        }
-      }
-
-      // Auto-generate combined summary from ALL cached analyses
-      const allCachedAnalyses = getAllRepoAnalyses();
-      if (allCachedAnalyses.length > 0) {
-        const summaryMarkdown = generateCombinedSummary(allCachedAnalyses);
-        await exportToFile(summaryMarkdown, 'reports/summary.md');
-      }
-
-      // Final summary
-      const totalElapsed = Date.now() - analysisStartTime;
-      console.log(chalk.cyan('\n' + '='.repeat(60)));
-      console.log(chalk.bold.green(`Analyzed ${successCount} repositories in ${formatDuration(totalElapsed)}`));
-      if (skipCount > 0) {
-        console.log(chalk.dim(`Skipped ${skipCount} repos (no commits by you)`));
-      }
-      console.log(chalk.dim(`Reports saved to reports/`));
-      console.log(chalk.cyan('='.repeat(60) + '\n'));
-
-    } else if (hasCommand('analyze')) {
-      if (!isAuthenticated()) {
-        console.log(chalk.yellow('Not authenticated. Starting authentication...\n'));
-        await authenticate();
-        console.log();
-      }
-
-      // Validate OpenRouter config
-      validateOpenRouterConfig();
-
-      // Check if repo is specified
-      const analyzeIndex = getCommandIndex('analyze');
-      const repoArg = args[analyzeIndex + 1];
-
-      let owner, repo;
-
-      if (repoArg && repoArg.includes('/') && !repoArg.startsWith('-')) {
-        // Direct repo specification: owner/repo
-        [owner, repo] = repoArg.split('/');
-      } else {
-        // Interactive repo selection
-        const repos = await listRepositories();
-        const selected = await selectRepository(repos);
-        owner = selected.owner.login;
-        repo = selected.name;
-      }
-
-      // Check for export flag
-      const exportIndex = getCommandIndex('export');
-      const exportFile = exportIndex !== -1 ? args[exportIndex + 1] : null;
-
-      // Check for force flag
-      const forceMode = hasCommand('force');
-
-      // Run analysis with timing
-      const startTime = Date.now();
-      const analysis = await analyzeRepository(owner, repo, { force: forceMode });
-      const elapsed = Date.now() - startTime;
-
-      // Display or export
-      if (exportFile) {
-        const markdown = generateMarkdownReport(analysis);
-        await exportToFile(markdown, exportFile);
-      } else {
-        displayReport(analysis);
-      }
-
-      console.log(chalk.dim(`Completed in ${formatDuration(elapsed)}`));
-    } else {
-      console.log(chalk.red(`Unknown command: ${args.join(' ')}`));
-      showHelp();
-      process.exit(1);
+        console.log(chalk.red(`Unknown command: ${command || args.join(' ')}`));
+        showHelp();
+        process.exit(1);
     }
   } catch (error) {
-    console.error(chalk.red('\nError:'), error.message);
-    if (process.env.DEBUG) {
-      console.error(error);
+    if (error.name === 'ExitPromptError') {
+      console.log(chalk.dim('\nCancelled.\n'));
+      return;
     }
+    console.error(chalk.red('\nError:'), error.message);
+    if (process.env.DEBUG) console.error(error);
     process.exit(1);
   }
 }

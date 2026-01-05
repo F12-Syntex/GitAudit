@@ -5,14 +5,10 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js",
-    "auth": "node src/index.js --auth",
-    "list": "node src/index.js --list",
-    "analyze": "node src/index.js --analyze",
-    "analyze-all": "node src/index.js --analyze-all",
-    "export": "node src/index.js --export",
-    "big-export": "node src/index.js --big-export",
-    "token-count": "node src/index.js --token-count"
+    "start": "node src/index.js"
+  },
+  "bin": {
+    "gitaudit": "src/index.js"
   },
   "keywords": [
     "github",
@@ -24,6 +20,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@inquirer/prompts": "^8.1.0",
     "@octokit/auth-oauth-device": "^7.1.1",
     "@octokit/rest": "^21.0.2",
     "@openrouter/ai-sdk-provider": "^1.5.4",
