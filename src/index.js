@@ -81,6 +81,7 @@ ${chalk.bold('CV Generation:')}
   yarn start generate-cv                    Interactive mode
   yarn start generate-cv <url>              From job posting URL
   yarn start generate-cv "description..."   From job description text
+  yarn start generate-cv <url> --display    Open PDF after generation
 
 ${chalk.bold('Configuration:')}
   yarn start config                         View all settings
@@ -663,7 +664,7 @@ async function interactiveMode() {
           await cmdImport();
           break;
         case 'generate-cv':
-          await cmdGenerateCV();
+          await cmdGenerateCV(null, { display: true });
           break;
         case 'config':
           await cmdConfig();

@@ -1,9 +1,9 @@
 /**
  * User configuration management
- * Stores user preferences like templates, models, and personal info
+ * Simple JSON file based config at .cvconfig.json
  */
 
-import Conf from 'conf';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { readFile, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -11,49 +11,52 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const userConfigStore = new Conf({
-  projectName: 'gitaudit',
-  configName: 'user-config',
-  schema: {
-    cv: {
-      type: 'object',
-      properties: {
-        template: { type: 'string' },
-        model: { type: 'string' },
-        name: { type: 'string' },
-        email: { type: 'string' },
-        phone: { type: 'string' },
-        location: { type: 'string' },
-        website: { type: 'string' },
-        linkedin: { type: 'string' },
-        github: { type: 'string' },
-      },
-    },
-  },
-});
+const CONFIG_PATH = join(__dirname, '..', '.cvconfig.json');
 
 // Default configuration values
 const DEFAULTS = {
-  cv: {
-    template: 'default',
-    model: 'VERY_FAST',
-    name: 'Saifurahmaan Khan',
-    email: 'eng.saifkhan2003@gmail.com',
-    phone: '+44 7459 533082',
-    location: 'London, UK',
-    website: '',
-    linkedin: 'https://www.linkedin.com/in/saif-khan-550b76247/',
-    github: 'https://github.com/F12-Syntex',
-  },
+  template: 'default',
+  model: 'openai/gpt-4o',
+  name: 'Your Name',
+  email: 'your.email@example.com',
+  phone: '+44 XXX XXX XXXX',
+  location: 'London, UK',
+  website: '',
+  linkedin: '',
+  github: '',
 };
+
+/**
+ * Load config from file
+ * @returns {Object} Config object
+ */
+function loadConfig() {
+  try {
+    if (existsSync(CONFIG_PATH)) {
+      const content = readFileSync(CONFIG_PATH, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch {
+    // Return defaults if file doesn't exist or is invalid
+  }
+  return {};
+}
+
+/**
+ * Save config to file
+ * @param {Object} config - Config to save
+ */
+function saveConfig(config) {
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
+}
 
 /**
  * Get CV configuration
  * @returns {Object} CV config with defaults
  */
 export function getCVConfig() {
-  const stored = userConfigStore.get('cv') || {};
-  return { ...DEFAULTS.cv, ...stored };
+  const stored = loadConfig();
+  return { ...DEFAULTS, ...stored };
 }
 
 /**
@@ -62,7 +65,7 @@ export function getCVConfig() {
  */
 export function setCVConfig(config) {
   const current = getCVConfig();
-  userConfigStore.set('cv', { ...current, ...config });
+  saveConfig({ ...current, ...config });
 }
 
 /**
@@ -82,7 +85,7 @@ export function getCVConfigValue(key) {
 export function setCVConfigValue(key, value) {
   const current = getCVConfig();
   current[key] = value;
-  userConfigStore.set('cv', current);
+  saveConfig(current);
 }
 
 /**
@@ -102,7 +105,7 @@ export async function getTemplate(templateName = 'default') {
   }
 
   // Otherwise, load from built-in templates
-  const templatePath = join(__dirname, '..', 'templates', `cv-${templateName}.tex`);
+  const templatePath = join(__dirname, '..', 'templates', `${templateName}.tex`);
   try {
     return await readFile(templatePath, 'utf-8');
   } catch {
@@ -132,5 +135,5 @@ export function getAllConfig() {
  * Reset configuration to defaults
  */
 export function resetConfig() {
-  userConfigStore.clear();
+  saveConfig(DEFAULTS);
 }

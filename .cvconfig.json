@@ -1,0 +1,11 @@
+{
+  "template": "default",
+  "model": "google/gemini-2.5-flash",
+  "name": "Saifurahmaan Khan",
+  "email": "eng.saifkhan2003@gmail.com",
+  "phone": "+44 7459 533082",
+  "location": "London, UK",
+  "website": "",
+  "linkedin": "https://www.linkedin.com/in/saif-khan-550b76247/",
+  "github": "https://github.com/F12-Syntex"
+}

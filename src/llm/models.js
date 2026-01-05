@@ -74,11 +74,33 @@ export const MODEL_PARAMS = {
 
 /**
  * Get model configuration for a given mode with optional overrides
- * @param {string} mode - Mode name (e.g., 'VERY_FAST', 'HIGH_REASONING')
+ * @param {string} mode - Mode name (e.g., 'VERY_FAST', 'HIGH_REASONING') or direct model name (e.g., 'openai/gpt-4o')
  * @param {string[]} overrides - Array of override names (e.g., ['reasoning', 'concise'])
  * @returns {Object} Complete model configuration
  */
 export function getModel(mode, overrides = []) {
+  // Check if it's a direct model name (contains a slash like 'openai/gpt-4o')
+  if (mode.includes('/')) {
+    let params = {
+      temperature: 0.4,
+      max_tokens: 4000
+    };
+
+    // Apply overrides
+    for (const override of overrides) {
+      const overrideParams = MODEL_PARAMS[override];
+      if (overrideParams) {
+        params = { ...params, ...overrideParams };
+      }
+    }
+
+    return {
+      model: mode,
+      description: 'Custom model',
+      params
+    };
+  }
+
   const modeConfig = MODEL_MODES[mode];
 
   if (!modeConfig) {
