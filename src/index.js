@@ -8,7 +8,7 @@ import { listRepositories, displayRepositories, getRepositoryDetails } from './g
 import { isAuthenticated, getUser } from './storage.js';
 import { fetchUserCommits, filterCommits, getCommitStats } from './commits/fetch.js';
 import { batchCommitsByFeature, analyzeCommitBatches, generatePortfolioSummary, getAnalysisStats } from './commits/analyze.js';
-import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses } from './commits/cache.js';
+import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses, clearRepoCache, clearAllCaches, clearAnalyzedStatus } from './commits/cache.js';
 import { generateMarkdownReport, displayReport, exportToFile } from './output/markdown.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
 
@@ -31,8 +31,10 @@ ${chalk.bold('Commands:')}
   --analyze              Analyze contributions (interactive repo picker)
   --analyze owner/repo   Analyze a specific repository
   --analyze-all          Analyze all unanalyzed repositories
+  --force                Re-analyze ignoring cache (use with --analyze)
   --export <dir>         Export all cached analyses to markdown files
   --export owner/repo    Export a specific cached analysis
+  --clear-cache          Clear all cached data
   --help                 Show this help message
 
 ${chalk.bold('Setup:')}
@@ -107,9 +109,11 @@ async function selectRepository(repos) {
  * Analyze a repository's commits
  * @param {string} owner - Repository owner
  * @param {string} repo - Repository name
+ * @param {Object} options - Analysis options
+ * @param {boolean} options.force - Force re-fetch, ignore cache
  * @returns {Promise<Object>} Analysis results
  */
-async function analyzeRepository(owner, repo) {
+async function analyzeRepository(owner, repo, options = {}) {
   console.log(chalk.bold.cyan(`\nAnalyzing ${owner}/${repo}...\n`));
 
   // Reset token tracking for this analysis
@@ -118,14 +122,19 @@ async function analyzeRepository(owner, repo) {
   // Get repository details
   const repoInfo = await getRepositoryDetails(owner, repo);
 
-  // Check cache for commits
+  // Check cache for commits (unless force mode)
   let commits;
-  const cached = getCachedCommits(owner, repo);
+  const cached = options.force ? null : getCachedCommits(owner, repo);
 
   if (cached) {
     console.log(chalk.dim(`Using cached commits (${cached.count} commits)`));
     commits = cached.commits;
   } else {
+    if (options.force) {
+      console.log(chalk.dim('Force mode: fetching fresh commits...'));
+      clearRepoCache(owner, repo);
+      clearAnalyzedStatus(owner, repo);
+    }
     // Fetch commits from GitHub
     commits = await fetchUserCommits(owner, repo);
 
@@ -215,6 +224,13 @@ async function main() {
     return;
   }
 
+  // Clear cache command
+  if (hasCommand('clear-cache')) {
+    clearAllCaches();
+    console.log(chalk.green('All caches cleared.'));
+    return;
+  }
+
   // All other commands need config
   validateConfig();
 
@@ -299,6 +315,9 @@ async function main() {
       const exportIndex = getCommandIndex('export');
       const exportDir = exportIndex !== -1 ? args[exportIndex + 1] : null;
 
+      // Check for force flag
+      const forceMode = hasCommand('force');
+
       const results = [];
       let successCount = 0;
       let skipCount = 0;
@@ -311,7 +330,7 @@ async function main() {
         console.log(chalk.cyan(`[${i + 1}/${unanalyzedRepos.length}] ${owner}/${repoName}`));
 
         try {
-          const analysis = await analyzeRepository(owner, repoName);
+          const analysis = await analyzeRepository(owner, repoName, { force: forceMode });
 
           if (analysis.stats.totalCommits === 0) {
             console.log(chalk.dim('  No commits by you, skipping...\n'));
@@ -375,8 +394,11 @@ async function main() {
       const exportIndex = getCommandIndex('export');
       const exportFile = exportIndex !== -1 ? args[exportIndex + 1] : null;
 
+      // Check for force flag
+      const forceMode = hasCommand('force');
+
       // Run analysis
-      const analysis = await analyzeRepository(owner, repo);
+      const analysis = await analyzeRepository(owner, repo, { force: forceMode });
 
       // Display or export
       if (exportFile) {

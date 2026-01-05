@@ -88,7 +88,7 @@ export function detailedAnalysisPrompt(batch, changes) {
     }
   }
 
-  return `Describe this code change factually:
+  return `Describe this code change in technical detail:
 
 Commits:
 ${commits}
@@ -98,16 +98,23 @@ ${filesSummary || 'No file details available'}
 
 ${patchSummary ? `Code changes (sample):\n\`\`\`diff\n${patchSummary}\n\`\`\`` : ''}
 
-Write a FACTUAL technical description (under 100 words) covering:
-1. What was built/implemented/fixed (be specific)
-2. Technologies, frameworks, libraries used
-3. How components connect (e.g. "linked X with Y to achieve Z")
+Write a detailed technical description (150-200 words) explaining:
+1. WHAT was built/implemented/fixed - be very specific about functionality
+2. HOW it was implemented - describe the approach, patterns, data flow
+3. WHY certain decisions were made (if apparent from the code)
+4. What technologies/libraries/APIs are used and how they connect
 
-Rules:
-- No fluff, no marketing language
-- Be specific: "Implemented JWT authentication with bcrypt hashing" not "Added security features"
-- Name actual technologies and patterns used
-- Format: "[Action] [what] using [technologies] to [purpose]"`;
+Format your response as bullet points:
+- Start each bullet with an action verb (Implemented, Created, Added, Built, etc.)
+- Include specific function/class/file names when relevant
+- Explain data flow: "X calls Y which returns Z"
+- Mention any integrations: "Connected X API to Y component using Z pattern"
+
+Example format:
+- Implemented OAuth device flow authentication using @octokit/auth-oauth-device
+- Created pollForToken() function that polls GitHub API every 5 seconds until user completes authorization
+- Added persistent token storage using Conf library, storing encrypted credentials in user's app data folder
+- Built getAuthenticatedOctokit() factory that initializes REST client with stored token`;
 }
 
 /**
@@ -143,7 +150,7 @@ export function portfolioSummaryPrompt(analyses, repoInfo, stats = {}) {
   const totalCommits = analyses.reduce((sum, a) => sum + a.batch.commits.length, 0);
   const dateRange = getDateRange(analyses);
 
-  return `Generate a FACTUAL technical summary of contributions:
+  return `Generate a detailed technical summary of contributions:
 
 Repository: ${repoInfo.name}
 ${repoInfo.description ? `Description: ${repoInfo.description}` : ''}
@@ -154,25 +161,35 @@ ${contributions}
 
 Generate a markdown summary with these sections:
 
-## Technical Work
+## Technical Implementation
 
-List what was actually built/implemented. Format each item as:
-"[Built/Implemented/Created] [specific thing] using [technologies] [optional: to achieve purpose]"
+For each major piece of work, describe:
+1. What was built and its purpose
+2. How it works (architecture, data flow, key functions)
+3. Technologies/libraries used and why
 
-Examples:
-- Built REST API with Express.js and PostgreSQL for user management
-- Implemented OAuth2 authentication flow linking frontend React app with backend JWT tokens
-- Created data pipeline using Python pandas to transform CSV exports into normalized database records
+Format as detailed bullet points. Example:
+- **OAuth Authentication System**: Implemented GitHub OAuth device flow using @octokit/auth-oauth-device. User visits GitHub URL, enters code, and pollForToken() polls the API until authorization completes. Tokens stored persistently using Conf library in user's AppData folder.
+- **Commit Analysis Pipeline**: Built token-efficient analysis using tiered LLM approach. First pass uses cheap model (Gemini) for categorization, second pass uses Sonnet only for important batches. Batches commits by 4-hour time windows to reduce API calls.
 
-## Technologies Used
+## Architecture
 
-Bullet list of specific technologies, frameworks, libraries actually used in the code.
+Briefly describe how components connect:
+- Which files/modules handle what
+- Data flow between components
+- External APIs/services used
+
+## Technologies
+
+List specific technologies with their purpose:
+- @octokit/rest - GitHub API client for fetching commits and repo data
+- Conf - Persistent JSON storage for caching and credentials
+- etc.
 
 Rules:
-- NO fluff, NO marketing speak, NO vague descriptions
-- Be specific and technical
-- Only include what was actually done based on the commits
-- Keep it under 300 words total`;
+- Be specific and technical - name actual functions, files, patterns
+- Explain HOW things work, not just WHAT they do
+- No marketing language, no vague descriptions`;
 }
 
 /**

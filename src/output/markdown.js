@@ -5,7 +5,6 @@
 import { writeFile, mkdir } from 'fs/promises';
 import { dirname } from 'path';
 import chalk from 'chalk';
-import { categorizeWork } from '../commits/analyze.js';
 
 /**
  * Format date for display
@@ -43,15 +42,16 @@ export function generateMarkdownReport(analysis) {
   // Work Summary section (factual stats)
   sections.push(generateWorkSummary(stats, repoInfo));
 
-  // AI-generated technical summary (if available)
-  if (summary?.summary) {
-    sections.push(summary.summary);
-    sections.push('');
+  // Always show detailed contributions from analyses
+  if (analyses?.length > 0) {
+    sections.push(generateContributionsSection(analyses));
   }
 
-  // Detailed contributions (if not included in summary)
-  if (!summary?.summary && analyses?.length > 0) {
-    sections.push(generateContributionsSection(analyses));
+  // AI-generated technical summary (if available, add as additional context)
+  if (summary?.summary) {
+    sections.push('## Summary\n');
+    sections.push(summary.summary);
+    sections.push('');
   }
 
   // Footer
@@ -124,40 +124,42 @@ function generateWorkSummary(stats, repoInfo) {
  * @returns {string} Markdown section
  */
 function generateContributionsSection(analyses) {
-  const categorized = categorizeWork(analyses);
-  const lines = ['## Technical Work\n'];
+  const lines = ['## Commits\n'];
 
-  // Order categories by importance
-  const categoryOrder = ['feature', 'bugfix', 'performance', 'refactor', 'test', 'docs', 'chore', 'style', 'other'];
-
-  for (const category of categoryOrder) {
-    const items = categorized[category];
-    if (!items || items.length === 0) continue;
-
-    lines.push(`### ${capitalizeFirst(category === 'bugfix' ? 'Bug Fixes' : category + 's')}\n`);
-
-    // Sort by importance and take top items
-    const sorted = items
-      .sort((a, b) => (b.importance || 0) - (a.importance || 0))
-      .slice(0, 10);
-
-    for (const item of sorted) {
-      lines.push(`- ${item.description}`);
-
-      if (item.detailedAnalysis) {
-        // Add detailed analysis as sub-content (first 2 lines only)
-        const detail = item.detailedAnalysis.split('\n')
-          .filter(line => line.trim())
-          .slice(0, 2)
-          .join(' ')
-          .slice(0, 250);
-        if (detail) {
-          lines.push(`  ${detail}${item.detailedAnalysis.length > 250 ? '...' : ''}`);
-        }
-      }
+  // Collect all commits from all batches
+  const allCommits = [];
+  for (const analysis of analyses) {
+    for (const commit of analysis.batch.commits) {
+      allCommits.push({
+        sha: commit.sha?.slice(0, 7),
+        message: commit.commit?.message?.split('\n')[0] || '',
+        date: commit.commit?.author?.date,
+        category: analysis.category,
+        description: analysis.description,
+        detailedAnalysis: analysis.detailedAnalysis,
+      });
     }
+  }
 
-    lines.push('');
+  // Sort by date (newest first)
+  allCommits.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  // List all commits
+  for (const commit of allCommits) {
+    const date = commit.date ? new Date(commit.date).toLocaleDateString() : '';
+    lines.push(`- \`${commit.sha}\` ${commit.message} *(${date})*`);
+  }
+
+  lines.push('');
+
+  // Add detailed analyses if available
+  const detailedAnalyses = analyses.filter(a => a.detailedAnalysis);
+  if (detailedAnalyses.length > 0) {
+    lines.push('## Implementation Details\n');
+    for (const analysis of detailedAnalyses) {
+      lines.push(analysis.detailedAnalysis);
+      lines.push('');
+    }
   }
 
   return lines.join('\n');

@@ -15,8 +15,8 @@ const DEFAULT_TIME_WINDOW_HOURS = 4;
 // Maximum commits per batch
 const DEFAULT_MAX_BATCH_SIZE = 10;
 
-// Importance threshold for detailed analysis
-const IMPORTANCE_THRESHOLD = 3;
+// Importance threshold for detailed analysis (lower = more detailed analyses)
+const IMPORTANCE_THRESHOLD = 2;
 
 /**
  * Batch commits by time proximity and related changes
