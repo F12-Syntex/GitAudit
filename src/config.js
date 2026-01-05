@@ -34,3 +34,16 @@ export function validateConfig() {
     process.exit(1);
   }
 }
+
+/**
+ * Validate OpenRouter configuration (called on-demand for analysis features)
+ * @throws {Error} If OPENROUTER_API_KEY is not set
+ */
+export function validateOpenRouterConfig() {
+  if (!config.openrouter.apiKey) {
+    throw new Error(
+      'OPENROUTER_API_KEY is required for analysis features.\n' +
+      'Get your API key at https://openrouter.ai/keys and add it to your .env file.'
+    );
+  }
+}

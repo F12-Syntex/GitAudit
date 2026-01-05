@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/index.js",
     "auth": "node src/index.js --auth",
-    "list": "node src/index.js --list"
+    "list": "node src/index.js --list",
+    "analyze": "node src/index.js --analyze",
+    "analyze-all": "node src/index.js --analyze-all",
+    "export": "node src/index.js --export"
   },
   "keywords": [
     "github",
@@ -21,6 +24,8 @@
   "dependencies": {
     "@octokit/auth-oauth-device": "^7.1.1",
     "@octokit/rest": "^21.0.2",
+    "@openrouter/ai-sdk-provider": "^1.5.4",
+    "ai": "^5.0.117",
     "chalk": "^5.3.0",
     "conf": "^13.0.1",
     "dotenv": "^16.4.5",
