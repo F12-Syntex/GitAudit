@@ -23,6 +23,7 @@ build/
 # Output directories
 reports/*.md
 reports/**/*.md
+cv/
 
 
 # Local environment variables

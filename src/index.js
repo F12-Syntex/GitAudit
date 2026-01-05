@@ -14,6 +14,8 @@ import { join, basename } from 'path';
 import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSummary, generateBigExport } from './output/markdown.js';
 import { countReportTokens, displayTokenReport } from './output/tokens.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
+import { generateCV } from './cv/generate.js';
+import { getCVConfig, setCVConfigValue, getAllConfig } from './userConfig.js';
 
 // ============================================================================
 // Utility Functions
@@ -70,15 +72,28 @@ ${chalk.bold('Quick Commands:')}
   yarn start export             Export cached analyses to files
   yarn start big-export         Export all to single file
   yarn start import             Import markdown reports to cache
+  yarn start generate-cv        Generate a tailored CV for a job
+  yarn start config             View/edit configuration
   yarn start token-count        Count tokens in reports
   yarn start clear-cache        Clear all cached data
+
+${chalk.bold('CV Generation:')}
+  yarn start generate-cv                    Interactive mode
+  yarn start generate-cv <url>              From job posting URL
+  yarn start generate-cv "description..."   From job description text
+
+${chalk.bold('Configuration:')}
+  yarn start config                         View all settings
+  yarn start config set name "Your Name"    Set your name
+  yarn start config set email you@email.com Set your email
+  yarn start config set github username     Set GitHub username
 
 ${chalk.bold('Options:')}
   --force                       Re-analyze ignoring cache
 
 ${chalk.bold('Examples:')}
   yarn start analyze myuser/myrepo --force
-  yarn start export ./my-reports
+  yarn start generate-cv https://jobs.example.com/posting/123
 `);
 }
 
@@ -370,6 +385,133 @@ async function cmdClearCache() {
   }
 }
 
+async function cmdGenerateCV(args, options = {}) {
+  validateOpenRouterConfig();
+
+  const cached = getAllRepoAnalyses();
+  if (cached.length === 0) {
+    console.log(chalk.yellow('No cached analyses found. Run analyze and big-export first.\n'));
+    return;
+  }
+
+  // Parse args - could be a URL or job description
+  let jobDescription = null;
+  let url = null;
+
+  if (args) {
+    if (args.startsWith('http://') || args.startsWith('https://')) {
+      url = args;
+    } else {
+      jobDescription = args;
+    }
+  }
+
+  // If no args, prompt for input
+  if (!jobDescription && !url) {
+    const inputType = await select({
+      message: 'How would you like to provide the job description?',
+      choices: [
+        { name: 'Paste job description text', value: 'text' },
+        { name: 'Enter URL to job posting', value: 'url' },
+      ],
+    });
+
+    if (inputType === 'url') {
+      url = await input({ message: 'Job posting URL:' });
+    } else {
+      console.log(chalk.dim('Paste the job description (press Enter twice when done):'));
+      const lines = [];
+      const rl = await import('readline');
+      const reader = rl.createInterface({ input: process.stdin, output: process.stdout });
+
+      await new Promise((resolve) => {
+        let emptyCount = 0;
+        reader.on('line', (line) => {
+          if (line === '') {
+            emptyCount++;
+            if (emptyCount >= 2) {
+              reader.close();
+              resolve();
+            }
+          } else {
+            emptyCount = 0;
+            lines.push(line);
+          }
+        });
+      });
+      jobDescription = lines.join('\n');
+    }
+  }
+
+  if (!jobDescription && !url) {
+    console.log(chalk.red('No job description provided.\n'));
+    return;
+  }
+
+  console.log(chalk.bold.cyan('\nGenerating tailored CV...\n'));
+
+  try {
+    const result = await generateCV({
+      jobDescription,
+      url,
+      display: options.display,
+    });
+
+    console.log(chalk.green(`\n✓ CV generated!`));
+    console.log(chalk.dim(`  LaTeX: ${result.texPath}`));
+
+    if (result.pdfPath) {
+      console.log(chalk.green(`  PDF:   ${result.pdfPath}`));
+    }
+
+    console.log(chalk.dim(`  Tokens used: ${result.usage.inputTokens + result.usage.outputTokens}\n`));
+  } catch (error) {
+    console.error(chalk.red('Failed to generate CV:'), error.message);
+  }
+}
+
+async function cmdConfig(action, key, value) {
+  if (!action) {
+    // Show current config
+    const config = getAllConfig();
+    console.log(chalk.bold.cyan('\nCurrent Configuration:\n'));
+
+    console.log(chalk.bold('CV Settings:'));
+    const cvConfig = config.cv;
+    for (const [k, v] of Object.entries(cvConfig)) {
+      const displayValue = v || chalk.dim('(not set)');
+      console.log(`  ${chalk.cyan(k)}: ${displayValue}`);
+    }
+    console.log();
+    return;
+  }
+
+  if (action === 'set') {
+    if (!key || value === undefined) {
+      console.log(chalk.red('Usage: yarn start config set <key> <value>\n'));
+      console.log('Available keys: name, email, phone, location, website, linkedin, github, template, model');
+      return;
+    }
+    setCVConfigValue(key, value);
+    console.log(chalk.green(`✓ Set ${key} = ${value}\n`));
+    return;
+  }
+
+  if (action === 'get') {
+    if (!key) {
+      console.log(chalk.red('Usage: yarn start config get <key>\n'));
+      return;
+    }
+    const cvConfig = getCVConfig();
+    const val = cvConfig[key];
+    console.log(`${key}: ${val || chalk.dim('(not set)')}\n`);
+    return;
+  }
+
+  console.log(chalk.red(`Unknown config action: ${action}`));
+  console.log('Usage: yarn start config [set <key> <value> | get <key>]\n');
+}
+
 async function cmdImport(reportsDir = 'reports/repositories') {
   if (!isAuthenticated()) {
     console.log(chalk.yellow('Not authenticated. Please login first to determine owner.\n'));
@@ -449,6 +591,7 @@ async function showMainMenu() {
       choices.push(
         { name: `📁  Export reports (${cached.length} cached)`, value: 'export' },
         { name: '📄  Export all to single file', value: 'big-export' },
+        { name: '📝  Generate CV for job', value: 'generate-cv' },
         { name: '🔢  Count tokens in reports', value: 'token-count' },
       );
     } else {
@@ -458,6 +601,7 @@ async function showMainMenu() {
     }
 
     choices.push(
+      { name: '⚙️   Configuration', value: 'config' },
       { name: '🗑️   Clear cache', value: 'clear-cache' },
       { name: '🚪  Logout', value: 'logout' },
     );
@@ -518,6 +662,12 @@ async function interactiveMode() {
         case 'import':
           await cmdImport();
           break;
+        case 'generate-cv':
+          await cmdGenerateCV();
+          break;
+        case 'config':
+          await cmdConfig();
+          break;
         case 'clear-cache':
           await cmdClearCache();
           break;
@@ -570,7 +720,7 @@ async function main() {
   }
 
   // Validate config for most commands
-  if (!['auth', 'logout', 'help', 'clear-cache', 'import', 'token-count', 'big-export'].includes(command)) {
+  if (!['auth', 'logout', 'help', 'clear-cache', 'import', 'token-count', 'big-export', 'generate-cv', 'config'].includes(command)) {
     validateConfig();
   }
 
@@ -602,6 +752,12 @@ async function main() {
         break;
       case 'import':
         await cmdImport(commandArg);
+        break;
+      case 'generate-cv':
+        await cmdGenerateCV(commandArg, { display: hasFlag('display') });
+        break;
+      case 'config':
+        await cmdConfig(commandArg, commands[2], commands[3]);
         break;
       case 'clear-cache':
         await cmdClearCache();
