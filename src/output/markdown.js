@@ -306,6 +306,61 @@ export function generateCombinedSummary(analyses) {
 }
 
 /**
+ * Generate a single big export containing all repository reports
+ * @param {Object[]} analyses - Array of all repo analyses
+ * @returns {string} Combined markdown report with full details
+ */
+export function generateBigExport(analyses) {
+  const sections = [];
+
+  // Filter to valid analyses only
+  const validAnalyses = analyses.filter(a => a.repoInfo?.name);
+
+  // Overall stats header
+  let totalCommits = 0;
+  let totalHours = 0;
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  const allLanguages = new Set();
+
+  for (const analysis of validAnalyses) {
+    totalCommits += analysis.stats?.totalCommits || 0;
+    totalHours += analysis.stats?.estimatedHours || 0;
+    totalAdditions += analysis.stats?.totalAdditions || 0;
+    totalDeletions += analysis.stats?.totalDeletions || 0;
+    if (analysis.repoInfo?.languages) {
+      Object.keys(analysis.repoInfo.languages).forEach(lang => allLanguages.add(lang));
+    }
+  }
+
+  sections.push('# Complete Portfolio Report\n');
+  sections.push(`*${validAnalyses.length} repositories | ${totalCommits} commits | ~${Math.round(totalHours * 10) / 10} hours | +${totalAdditions}/-${totalDeletions} lines*\n`);
+  sections.push(`**Languages:** ${Array.from(allLanguages).join(', ')}\n`);
+  sections.push('---\n');
+
+  // Sort by commit count (most active first)
+  const sorted = [...validAnalyses].sort((a, b) =>
+    (b.stats?.totalCommits || 0) - (a.stats?.totalCommits || 0)
+  );
+
+  // Generate full report for each repository
+  for (const analysis of sorted) {
+    // Use the existing generateMarkdownReport but strip the footer
+    const fullReport = generateMarkdownReport(analysis);
+    // Remove the footer (last 2 lines with --- and Generated on)
+    const lines = fullReport.split('\n');
+    const withoutFooter = lines.slice(0, -3).join('\n');
+    sections.push(withoutFooter);
+    sections.push('\n---\n');
+  }
+
+  // Footer
+  sections.push(`*Generated on ${new Date().toLocaleDateString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
  * Display report in terminal
  * @param {Object} analysis - Analysis object
  */

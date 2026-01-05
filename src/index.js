@@ -9,7 +9,8 @@ import { isAuthenticated, getUser } from './storage.js';
 import { fetchUserCommits, filterCommits, getCommitStats } from './commits/fetch.js';
 import { batchCommitsByFeature, analyzeCommitBatches, generatePortfolioSummary, getAnalysisStats } from './commits/analyze.js';
 import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses, clearRepoCache, clearAllCaches, clearAnalyzedStatus } from './commits/cache.js';
-import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSummary } from './output/markdown.js';
+import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSummary, generateBigExport } from './output/markdown.js';
+import { countReportTokens, displayTokenReport } from './output/tokens.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
 
 function showHelp() {
@@ -34,6 +35,8 @@ ${chalk.bold('Commands:')}
   --force                Re-analyze ignoring cache (use with --analyze)
   --export <dir>         Export all cached analyses to markdown files
   --export owner/repo    Export a specific cached analysis
+  --big-export           Export all reports into a single file (reports/report.md)
+  --token-count          Count tokens in all report files
   --clear-cache          Clear all cached data
   --help                 Show this help message
 
@@ -251,6 +254,31 @@ async function main() {
   if (hasCommand('clear-cache')) {
     clearAllCaches();
     console.log(chalk.green('All caches cleared.'));
+    return;
+  }
+
+  // Token count command
+  if (hasCommand('token-count')) {
+    const tokenStats = await countReportTokens('reports');
+    if (tokenStats.totals.totalFiles === 0) {
+      console.log(chalk.yellow('No report files found in reports/ directory.'));
+      console.log(chalk.dim('Run --analyze or --analyze-all first to generate reports.'));
+      return;
+    }
+    displayTokenReport(tokenStats);
+    return;
+  }
+
+  // Big export command - single file with all reports
+  if (hasCommand('big-export')) {
+    const allAnalyses = getAllRepoAnalyses();
+    if (allAnalyses.length === 0) {
+      console.log(chalk.yellow('No cached analyses found. Run --analyze first.'));
+      return;
+    }
+    const bigReport = generateBigExport(allAnalyses);
+    await exportToFile(bigReport, 'reports/report.md');
+    console.log(chalk.green(`\nExported ${allAnalyses.length} repositories to a single file.`));
     return;
   }
 

@@ -10,7 +10,9 @@
     "list": "node src/index.js --list",
     "analyze": "node src/index.js --analyze",
     "analyze-all": "node src/index.js --analyze-all",
-    "export": "node src/index.js --export"
+    "export": "node src/index.js --export",
+    "big-export": "node src/index.js --big-export",
+    "token-count": "node src/index.js --token-count"
   },
   "keywords": [
     "github",
@@ -29,6 +31,7 @@
     "chalk": "^5.3.0",
     "conf": "^13.0.1",
     "dotenv": "^16.4.5",
+    "gpt-tokenizer": "^3.4.0",
     "ora": "^8.1.0"
   }
 }
