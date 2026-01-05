@@ -9,7 +9,7 @@ import { isAuthenticated, getUser } from './storage.js';
 import { fetchUserCommits, filterCommits, getCommitStats } from './commits/fetch.js';
 import { batchCommitsByFeature, analyzeCommitBatches, generatePortfolioSummary, getAnalysisStats } from './commits/analyze.js';
 import { getCachedCommits, cacheCommits, markRepoAnalyzed, isRepoAnalyzed, getAnalyzedRepos, saveRepoAnalysis, getRepoAnalysis, getAllRepoAnalyses, clearRepoCache, clearAllCaches, clearAnalyzedStatus } from './commits/cache.js';
-import { generateMarkdownReport, displayReport, exportToFile } from './output/markdown.js';
+import { generateMarkdownReport, displayReport, exportToFile, generateCombinedSummary } from './output/markdown.js';
 import { getUsageReport, resetUsageTracking } from './llm/openrouter.js';
 
 function showHelp() {
@@ -45,6 +45,25 @@ ${chalk.bold('Setup:')}
   5. Run ${chalk.cyan('npm run auth')} to authenticate
   6. Run ${chalk.cyan('npm run analyze')} to analyze your contributions
 `);
+}
+
+/**
+ * Format milliseconds as human-readable duration
+ * @param {number} ms - Milliseconds
+ * @returns {string} Formatted duration (e.g., "2m 30s")
+ */
+function formatDuration(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
 }
 
 function showStatus() {
@@ -268,22 +287,30 @@ async function main() {
           console.log(chalk.dim('Available: ' + allAnalyses.map(a => a.repoKey).join(', ')));
           return;
         }
+        const repoName = exportArg.split('/')[1];
         const markdown = generateMarkdownReport(analysis);
-        const filename = `${exportArg.split('/')[1]}.md`;
+        const filename = `reports/repositories/${repoName}/report.md`;
         await exportToFile(markdown, filename);
       } else {
-        // Export all to directory
-        const dir = exportArg || './reports';
-        console.log(chalk.bold.cyan(`\nExporting ${allAnalyses.length} cached analyses to ${dir}/\n`));
+        // Export all to structured directory
+        const baseDir = exportArg || './reports';
+        console.log(chalk.bold.cyan(`\nExporting ${allAnalyses.length} cached analyses to ${baseDir}/\n`));
 
+        // Export individual repo reports
         for (const analysis of allAnalyses) {
           const repoName = analysis.repoKey.split('/')[1];
-          const filename = `${dir}/${repoName}.md`;
+          const filename = `${baseDir}/repositories/${repoName}/report.md`;
           const markdown = generateMarkdownReport(analysis);
           await exportToFile(markdown, filename);
         }
 
-        console.log(chalk.green(`\nExported ${allAnalyses.length} reports to ${dir}/`));
+        // Export combined summary
+        const summaryMarkdown = generateCombinedSummary(allAnalyses);
+        await exportToFile(summaryMarkdown, `${baseDir}/summary.md`);
+
+        console.log(chalk.green(`\nExported ${allAnalyses.length} reports to ${baseDir}/`));
+        console.log(chalk.dim(`  ${baseDir}/summary.md - Combined overview`));
+        console.log(chalk.dim(`  ${baseDir}/repositories/<repo>/report.md - Individual reports`));
       }
     } else if (hasCommand('analyze-all')) {
       if (!isAuthenticated()) {
@@ -321,6 +348,7 @@ async function main() {
       const results = [];
       let successCount = 0;
       let skipCount = 0;
+      const analysisStartTime = Date.now();
 
       for (let i = 0; i < unanalyzedRepos.length; i++) {
         const repo = unanalyzedRepos[i];
@@ -344,7 +372,7 @@ async function main() {
           // Export individual report if export dir specified
           if (exportDir) {
             const markdown = generateMarkdownReport(analysis);
-            const filename = `${exportDir}/${repoName}.md`;
+            const filename = `${exportDir}/repositories/${repoName}/report.md`;
             await exportToFile(markdown, filename);
           } else {
             // Brief summary for console
@@ -353,13 +381,33 @@ async function main() {
         } catch (error) {
           console.log(chalk.red(`  Error: ${error.message}\n`));
         }
+
+        // Show elapsed time and ETA
+        const elapsed = Date.now() - analysisStartTime;
+        const avgTimePerRepo = elapsed / (i + 1);
+        const remaining = unanalyzedRepos.length - (i + 1);
+        const eta = remaining * avgTimePerRepo;
+
+        if (remaining > 0) {
+          console.log(chalk.dim(`  Elapsed: ${formatDuration(elapsed)} | ETA: ${formatDuration(eta)} (${remaining} repos left)\n`));
+        }
+      }
+
+      // Export combined summary if exporting
+      if (exportDir && results.length > 0) {
+        const summaryMarkdown = generateCombinedSummary(results);
+        await exportToFile(summaryMarkdown, `${exportDir}/summary.md`);
       }
 
       // Final summary
+      const totalElapsed = Date.now() - analysisStartTime;
       console.log(chalk.cyan('\n' + '='.repeat(60)));
-      console.log(chalk.bold.green(`Analyzed ${successCount} repositories`));
+      console.log(chalk.bold.green(`Analyzed ${successCount} repositories in ${formatDuration(totalElapsed)}`));
       if (skipCount > 0) {
         console.log(chalk.dim(`Skipped ${skipCount} repos (no commits by you)`));
+      }
+      if (exportDir) {
+        console.log(chalk.dim(`Reports exported to ${exportDir}/`));
       }
       console.log(chalk.cyan('='.repeat(60) + '\n'));
 
@@ -397,8 +445,10 @@ async function main() {
       // Check for force flag
       const forceMode = hasCommand('force');
 
-      // Run analysis
+      // Run analysis with timing
+      const startTime = Date.now();
       const analysis = await analyzeRepository(owner, repo, { force: forceMode });
+      const elapsed = Date.now() - startTime;
 
       // Display or export
       if (exportFile) {
@@ -407,6 +457,8 @@ async function main() {
       } else {
         displayReport(analysis);
       }
+
+      console.log(chalk.dim(`Completed in ${formatDuration(elapsed)}`));
     } else {
       console.log(chalk.red(`Unknown command: ${args.join(' ')}`));
       showHelp();

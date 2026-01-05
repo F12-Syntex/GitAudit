@@ -218,6 +218,94 @@ export async function exportToFile(content, filename) {
 }
 
 /**
+ * Generate combined summary of all repositories
+ * @param {Object[]} analyses - Array of all repo analyses
+ * @returns {string} Combined markdown report
+ */
+export function generateCombinedSummary(analyses) {
+  const sections = [];
+
+  sections.push('# Portfolio Summary\n');
+  sections.push(`*${analyses.length} repositories analyzed*\n`);
+
+  // Overall stats
+  let totalCommits = 0;
+  let totalHours = 0;
+  let totalAdditions = 0;
+  let totalDeletions = 0;
+  const allLanguages = new Set();
+
+  for (const analysis of analyses) {
+    totalCommits += analysis.stats?.totalCommits || 0;
+    totalHours += analysis.stats?.estimatedHours || 0;
+    totalAdditions += analysis.stats?.totalAdditions || 0;
+    totalDeletions += analysis.stats?.totalDeletions || 0;
+    if (analysis.repoInfo?.languages) {
+      Object.keys(analysis.repoInfo.languages).forEach(lang => allLanguages.add(lang));
+    }
+  }
+
+  sections.push('## Overall Statistics\n');
+  sections.push(`- **Total Commits:** ${totalCommits}`);
+  sections.push(`- **Estimated Work:** ~${Math.round(totalHours * 10) / 10} hours`);
+  sections.push(`- **Lines Changed:** +${totalAdditions} / -${totalDeletions}`);
+  sections.push(`- **Languages:** ${Array.from(allLanguages).join(', ')}`);
+  sections.push('');
+
+  // Repository list with links
+  sections.push('## Repositories\n');
+
+  // Sort by commit count (most active first)
+  const sorted = [...analyses].sort((a, b) =>
+    (b.stats?.totalCommits || 0) - (a.stats?.totalCommits || 0)
+  );
+
+  for (const analysis of sorted) {
+    const repo = analysis.repoInfo;
+    const stats = analysis.stats;
+    const repoName = repo.name;
+
+    sections.push(`### [${repoName}](./repositories/${repoName}/report.md)\n`);
+
+    if (repo.description) {
+      sections.push(`${repo.description}\n`);
+    }
+
+    // Stats line
+    const period = stats.firstCommit && stats.lastCommit
+      ? `${formatDate(stats.firstCommit)} - ${formatDate(stats.lastCommit)}`
+      : '';
+
+    sections.push(`**${stats.totalCommits || 0} commits** | ~${stats.estimatedHours || 0}h | +${stats.totalAdditions || 0}/-${stats.totalDeletions || 0} lines`);
+    if (period) {
+      sections.push(`*${period}*`);
+    }
+
+    // Brief summary from AI if available
+    if (analysis.summary?.summary) {
+      // Extract first paragraph or bullet points
+      const summaryLines = analysis.summary.summary.split('\n')
+        .filter(line => line.trim())
+        .slice(0, 3)
+        .map(line => line.startsWith('-') || line.startsWith('*') ? line : `  ${line}`);
+
+      if (summaryLines.length > 0) {
+        sections.push('');
+        sections.push(summaryLines.join('\n'));
+      }
+    }
+
+    sections.push('');
+  }
+
+  // Footer
+  sections.push('---');
+  sections.push(`*Generated on ${new Date().toLocaleDateString()}*`);
+
+  return sections.join('\n');
+}
+
+/**
  * Display report in terminal
  * @param {Object} analysis - Analysis object
  */
